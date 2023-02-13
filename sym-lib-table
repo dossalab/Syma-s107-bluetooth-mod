@@ -1,0 +1,7 @@
+(sym_lib_table
+  (lib (name "npm1100")(type "KiCad")(uri "${KIPRJMOD}/symbols/npm1100.kicad_sym")(options "")(descr ""))
+  (lib (name "drv821x")(type "KiCad")(uri "${KIPRJMOD}/symbols/drv821x.kicad_sym")(options "")(descr ""))
+  (lib (name "power_local")(type "KiCad")(uri "${KIPRJMOD}/symbols/power.kicad_sym")(options "")(descr ""))
+  (lib (name "bq27427")(type "KiCad")(uri "${KIPRJMOD}/symbols/bq27427.kicad_sym")(options "")(descr ""))
+  (lib (name "enc-03")(type "KiCad")(uri "${KIPRJMOD}/symbols/enc-03.kicad_sym")(options "")(descr ""))
+)

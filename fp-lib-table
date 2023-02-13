@@ -1,0 +1,6 @@
+(fp_lib_table
+  (lib (name "Nordic_WLCSP-25")(type "KiCad")(uri "${KIPRJMOD}/lib/Nordic_WLCSP-25.pretty")(options "")(descr ""))
+  (lib (name "Holes")(type "KiCad")(uri "${KIPRJMOD}/lib/Holes.pretty")(options "")(descr ""))
+  (lib (name "ENC-03_PCB")(type "KiCad")(uri "${KIPRJMOD}/lib/ENC-03_PCB.pretty")(options "")(descr ""))
+  (lib (name "TI_WLCSP-9")(type "KiCad")(uri "${KIPRJMOD}/lib/TI_WLCSP-9.pretty")(options "")(descr ""))
+)
