@@ -47,8 +47,8 @@ pub async fn run(signal: &'static LedIndicationsSignal, r: LedSwitchResources) {
 
     let mut do_indications = async |x| match x {
         IndicationStyle::Disabled => future::pending().await,
-        IndicationStyle::BlinkFast => run_sequencer(&mut pwm, &sine_sequence, 7).await,
-        IndicationStyle::BlinkSlow => run_sequencer(&mut pwm, &sine_sequence, 20).await,
+        IndicationStyle::BlinkFast => run_sequencer(&mut pwm, &sine_sequence, 20).await,
+        IndicationStyle::BlinkSlow => run_sequencer(&mut pwm, &sine_sequence, 40).await,
     };
 
     let mut style = IndicationStyle::Disabled;
