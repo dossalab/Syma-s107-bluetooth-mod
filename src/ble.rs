@@ -16,7 +16,10 @@ use static_cell::StaticCell;
 
 use crate::{
     indications::{IndicationStyle, LedIndicationsSignal},
-    xbox::{self, ButtonFlags, JoystickData, XboxHidServiceClient, XboxHidServiceClientEvent},
+    xbox::{
+        self, ButtonFlags, JoystickData, JoystickDataSignal, XboxHidServiceClient,
+        XboxHidServiceClientEvent,
+    },
 };
 
 pub struct Bonder {}
@@ -125,6 +128,7 @@ async fn wait_connection(
     addr: Address,
     bonder: &'static Bonder,
     indications: &'static LedIndicationsSignal,
+    output: &'static JoystickDataSignal,
 ) -> Result<(), BleError> {
     let whitelist = &[&addr];
     let mut config = central::ConnectConfig::default();
@@ -190,7 +194,7 @@ async fn wait_connection(
                 buttons: ButtonFlags::from_bits_truncate(button_mask),
             };
 
-            info!("jd: {}", jd);
+            output.signal(jd);
         }
     })
     .await;
@@ -199,14 +203,18 @@ async fn wait_connection(
 }
 
 #[embassy_executor::task]
-pub async fn run(sd: &'static Softdevice, indications: &'static LedIndicationsSignal) {
+pub async fn run(
+    sd: &'static Softdevice,
+    indications: &'static LedIndicationsSignal,
+    output: &'static JoystickDataSignal,
+) {
     static BONDER: StaticCell<Bonder> = StaticCell::new();
 
     let bonder = BONDER.init(Bonder::default());
 
     loop {
         if let Some(address) = scan(sd, indications).await {
-            match wait_connection(sd, address, bonder, indications).await {
+            match wait_connection(sd, address, bonder, indications, output).await {
                 Err(e) => error!("unable to handle connection - {}", e),
                 Ok(_) => {}
             }

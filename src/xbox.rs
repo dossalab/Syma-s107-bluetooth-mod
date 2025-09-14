@@ -1,6 +1,7 @@
 // Xbox one controller hid defs
 
 use defmt::bitflags;
+use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, signal::Signal};
 use nrf_softdevice::gatt_client;
 
 bitflags! {
@@ -28,6 +29,8 @@ pub struct JoystickData {
     pub t2: u16,
     pub buttons: ButtonFlags,
 }
+
+pub type JoystickDataSignal = Signal<CriticalSectionRawMutex, JoystickData>;
 
 #[gatt_client(uuid = "1812")]
 pub struct XboxHidServiceClient {

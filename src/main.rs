@@ -2,6 +2,7 @@
 #![no_main]
 
 use assign_resources::assign_resources;
+use xbox::JoystickDataSignal;
 
 use core::panic::PanicInfo;
 use embassy_executor::Spawner;
@@ -14,6 +15,7 @@ use nrf_softdevice::Softdevice;
 use defmt::{info, unwrap};
 
 mod ble;
+mod control;
 mod indications;
 mod xbox;
 
@@ -77,9 +79,11 @@ async fn main(spawner: Spawner) {
     info!("ble-copter ({}) is running. Hello!", git_version!());
 
     static LED_INDICATIONS_SIGNAL: LedIndicationsSignal = Signal::new();
+    static JOYSTICK_SIGNAL: JoystickDataSignal = Signal::new();
 
     unwrap!(spawner.spawn(indications::run(&LED_INDICATIONS_SIGNAL, r.led_switch)));
-    unwrap!(spawner.spawn(ble::run(sd, &LED_INDICATIONS_SIGNAL)));
+    unwrap!(spawner.spawn(ble::run(sd, &LED_INDICATIONS_SIGNAL, &JOYSTICK_SIGNAL)));
+    unwrap!(spawner.spawn(control::run(&JOYSTICK_SIGNAL, r.motor)));
 
     sd.run().await
 }
