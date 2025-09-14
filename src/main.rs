@@ -17,6 +17,7 @@ use defmt::{info, unwrap};
 mod ble;
 mod control;
 mod indications;
+mod power;
 mod xbox;
 
 use defmt_rtt as _;
@@ -40,8 +41,8 @@ assign_resources! {
         scl: P0_08,
     },
     charger: ChargerResources {
-        charge: P0_11,
-        error: P0_12
+        charging: P0_11,
+        fault: P0_12
     },
     gyro: GyroResources {
         power: P0_26,
@@ -85,6 +86,7 @@ async fn main(spawner: Spawner) {
     unwrap!(spawner.spawn(indications::run(&LED_INDICATIONS_SIGNAL, r.led_switch)));
     unwrap!(spawner.spawn(ble::run(sd, &LED_INDICATIONS_SIGNAL, &JOYSTICK_SIGNAL)));
     unwrap!(spawner.spawn(control::run(&JOYSTICK_SIGNAL, r.motor)));
+    unwrap!(spawner.spawn(power::run(&LED_INDICATIONS_SIGNAL, r.fuelgauge, r.charger)));
 
     sd.run().await
 }
