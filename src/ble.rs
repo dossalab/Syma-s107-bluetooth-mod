@@ -1,4 +1,3 @@
-use byteorder::{ByteOrder, LittleEndian};
 use defmt::{debug, error, info, warn};
 use embassy_futures::select::{select, Either};
 use embassy_time::{Duration, Timer};
@@ -14,12 +13,11 @@ use nrf_softdevice::{
 };
 use static_cell::StaticCell;
 
+use crate::xbox::JoystickDataSignal;
+use crate::xbox::XboxHidServiceClient;
 use crate::{
     indications::{IndicationStyle, LedIndicationsSignal},
-    xbox::{
-        self, ButtonFlags, JoystickData, JoystickDataSignal, XboxHidServiceClient,
-        XboxHidServiceClientEvent,
-    },
+    xbox::{self, XboxHidServiceClientEvent},
 };
 
 pub struct Bonder {}
@@ -176,24 +174,7 @@ async fn wait_connection(
 
     gatt_client::run(&conn, &client, |event| match event {
         XboxHidServiceClientEvent::HidReportNotification(val) => {
-            let button_mask = LittleEndian::read_u24(&val[13..16]);
-
-            let x1 = LittleEndian::read_u16(&val[0..2]);
-            let y1 = LittleEndian::read_u16(&val[2..4]);
-            let x2 = LittleEndian::read_u16(&val[4..6]);
-            let y2 = LittleEndian::read_u16(&val[6..8]);
-
-            let t1 = LittleEndian::read_u16(&val[8..10]);
-            let t2 = LittleEndian::read_u16(&val[10..12]);
-
-            let jd = JoystickData {
-                j1: (x1, y1),
-                j2: (x2, y2),
-                t1,
-                t2,
-                buttons: ButtonFlags::from_bits_truncate(button_mask),
-            };
-
+            let jd = xbox::JoystickData::from_packet(&val);
             output.signal(jd);
         }
     })

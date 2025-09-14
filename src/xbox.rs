@@ -1,8 +1,11 @@
 // Xbox one controller hid defs
 
+use byteorder::{ByteOrder, LittleEndian};
 use defmt::bitflags;
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, signal::Signal};
 use nrf_softdevice::gatt_client;
+
+pub const STICKS_RANGE: i32 = 65535;
 
 bitflags! {
     pub struct ButtonFlags:u32 {
@@ -23,8 +26,8 @@ bitflags! {
 
 #[derive(defmt::Format)]
 pub struct JoystickData {
-    pub j1: (u16, u16),
-    pub j2: (u16, u16),
+    pub j1: (i32, i32),
+    pub j2: (i32, i32),
     pub t1: u16,
     pub t2: u16,
     pub buttons: ButtonFlags,
@@ -32,6 +35,29 @@ pub struct JoystickData {
 
 pub type JoystickDataSignal = Signal<CriticalSectionRawMutex, JoystickData>;
 
+impl JoystickData {
+    pub fn from_packet(p: &[u8; 16]) -> Self {
+        let button_mask = LittleEndian::read_u24(&p[13..16]);
+
+        let x1 = LittleEndian::read_u16(&p[0..2]);
+        let y1 = LittleEndian::read_u16(&p[2..4]);
+        let x2 = LittleEndian::read_u16(&p[4..6]);
+        let y2 = LittleEndian::read_u16(&p[6..8]);
+
+        let t1 = LittleEndian::read_u16(&p[8..10]);
+        let t2 = LittleEndian::read_u16(&p[10..12]);
+
+        let map_stick = |x| (x as i32) - STICKS_RANGE / 2;
+
+        JoystickData {
+            j1: (map_stick(x1), -map_stick(y1)),
+            j2: (map_stick(x2), -map_stick(y2)),
+            t1,
+            t2,
+            buttons: ButtonFlags::from_bits_truncate(button_mask),
+        }
+    }
+}
 #[gatt_client(uuid = "1812")]
 pub struct XboxHidServiceClient {
     #[characteristic(uuid = "2a4b", read)]

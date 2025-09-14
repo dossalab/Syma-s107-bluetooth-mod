@@ -23,6 +23,7 @@ use defmt_rtt as _;
 
 assign_resources! {
     motor: MotorResources {
+        pwm: PWM0,
         rotor1: P0_01,
         rotor2: P0_02,
         tail_p: P0_03,
@@ -31,7 +32,7 @@ assign_resources! {
     led_switch: LedSwitchResources {
         led: P0_00,
         switch: P0_05,
-        pwm: PWM0
+        pwm: PWM1
     },
     fuelgauge: FuelgaugeResources {
         int: P0_06,
