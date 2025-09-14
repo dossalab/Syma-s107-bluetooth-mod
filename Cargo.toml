@@ -42,6 +42,10 @@ assign-resources = "0.5.0"
 embedded-hal-async = "1.0.0"
 futures = { version = "0.3.31", default-features = false }
 
+[dependencies.bq27xxx]
+git = "https://github.com/dossalab/bq27xxx-rs"
+features = [ "defmt" ]
+
 [dependencies.embassy-executor]
 git = "https://github.com/embassy-rs/embassy"
 features = [ "arch-cortex-m", "executor-thread", "executor-interrupt" ]

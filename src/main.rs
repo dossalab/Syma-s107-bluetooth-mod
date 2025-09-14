@@ -6,7 +6,7 @@ use xbox::JoystickDataSignal;
 
 use core::panic::PanicInfo;
 use embassy_executor::Spawner;
-use embassy_nrf::{interrupt, peripherals, Peri};
+use embassy_nrf::{bind_interrupts, interrupt, peripherals, twim, Peri};
 use embassy_sync::signal::Signal;
 use git_version::git_version;
 use indications::LedIndicationsSignal;
@@ -22,6 +22,10 @@ mod xbox;
 
 use defmt_rtt as _;
 
+bind_interrupts!(struct Irqs {
+    TWISPI0 => twim::InterruptHandler<peripherals::TWISPI0>;
+});
+
 assign_resources! {
     motor: MotorResources {
         pwm: PWM0,
@@ -36,6 +40,7 @@ assign_resources! {
         pwm: PWM1
     },
     fuelgauge: FuelgaugeResources {
+        i2c: TWISPI0,
         int: P0_06,
         sda: P0_07,
         scl: P0_08,
