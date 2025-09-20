@@ -1,3 +1,4 @@
+use cortex_m::peripheral::nvic;
 use defmt::{debug, error, info, warn};
 use embassy_futures::select::{select, Either};
 use embassy_time::{Duration, Timer};
@@ -175,6 +176,11 @@ async fn wait_connection(
     gatt_client::run(&conn, &client, |event| match event {
         XboxHidServiceClientEvent::HidReportNotification(val) => {
             let jd = xbox::JoystickData::from_packet(&val);
+
+            if jd.buttons.contains(xbox::ButtonFlags::BUTTON_RB) {
+                cortex_m::peripheral::SCB::sys_reset();
+            }
+
             output.signal(jd);
         }
     })

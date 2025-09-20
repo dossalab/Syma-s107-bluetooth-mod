@@ -63,7 +63,7 @@ impl<'a, P: pwm::Instance> Controller<'a, P> {
 
     fn update(&mut self, position: &JoystickData) {
         let throttle = (position.j1.1 >> 5).clamp(0, 1023);
-        let yaw = position.j1.0 >> 5;
+        let yaw = position.j2.0 >> 5;
         let elevator = position.j2.1 >> 5;
 
         let rotor1 = Self::clamp_to_pwm_range(throttle - (yaw / Self::RUDDER_SCALE));
