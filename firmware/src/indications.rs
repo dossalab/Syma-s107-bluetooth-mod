@@ -37,9 +37,11 @@ pub async fn run(signal: &'static LedIndicationsSignal, r: LedSwitchResources) {
     let pwm_config = pwm::Config::default();
     let mut pwm = unwrap!(SequencePwm::new_1ch(r.pwm, r.led, pwm_config));
 
+    // Bit 15 here is used to set PWM output polarity
     let sine_sequence = [
-        500, 598, 691, 778, 854, 916, 962, 990, 1000, 990, 962, 916, 854, 778, 691, 598, 500, 402,
-        309, 222, 146, 84, 38, 10, 0, 10, 38, 84, 146, 222, 309, 402,
+        0x8000, 0x8062, 0x80c3, 0x8122, 0x817f, 0x81d7, 0x822c, 0x827a, 0x82c3, 0x8305, 0x833f,
+        0x8372, 0x839c, 0x83bd, 0x83d5, 0x83e3, 0x83e8, 0x83e3, 0x83d5, 0x83bd, 0x839c, 0x8372,
+        0x833f, 0x8305, 0x82c3, 0x827a, 0x822c, 0x81d7, 0x817f, 0x8122, 0x80c3, 0x8062, 0x8000,
     ];
 
     let mut do_indications = async |x| match x {
