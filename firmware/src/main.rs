@@ -16,6 +16,7 @@ use defmt::{info, unwrap};
 
 mod ble;
 mod control;
+mod executor;
 mod indications;
 mod power;
 mod xbox;
@@ -79,7 +80,7 @@ fn hw_init() -> (AssignedResources, &'static Softdevice) {
     (split_resources!(p), sd)
 }
 
-#[embassy_executor::main]
+#[embassy_executor::main(executor = "executor::MwuWorkaroundExecutor")]
 async fn main(spawner: Spawner) {
     let (r, sd) = hw_init();
 

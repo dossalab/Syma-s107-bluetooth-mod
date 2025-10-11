@@ -63,7 +63,7 @@ features = [ "s132", "ble-gatt-client", "ble-central", "ble-sec", "critical-sect
 [dependencies.embassy-nrf]
 git = "https://github.com/dossalab/embassy"
 branch = "rliutko/nrf52832-inverted-pwm"
-features = [ "time-driver-rtc1", "gpiote"  ]
+features = [ "time-driver-rtc1", "gpiote", "unstable-pac" ]
 
 [dependencies.embassy-sync]
 git = "https://github.com/embassy-rs/embassy"
