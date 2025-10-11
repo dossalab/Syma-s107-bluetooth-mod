@@ -88,10 +88,22 @@ async fn main(spawner: Spawner) {
     static LED_INDICATIONS_SIGNAL: LedIndicationsSignal = Signal::new();
     static JOYSTICK_SIGNAL: JoystickDataSignal = Signal::new();
 
-    unwrap!(spawner.spawn(indications::run(&LED_INDICATIONS_SIGNAL, r.led_switch)));
-    unwrap!(spawner.spawn(ble::run(sd, &LED_INDICATIONS_SIGNAL, &JOYSTICK_SIGNAL)));
-    unwrap!(spawner.spawn(control::run(&JOYSTICK_SIGNAL, r.motor)));
-    unwrap!(spawner.spawn(power::run(&LED_INDICATIONS_SIGNAL, r.fuelgauge, r.charger)));
+    spawner.spawn(unwrap!(indications::run(
+        &LED_INDICATIONS_SIGNAL,
+        r.led_switch
+    )));
+    spawner.spawn(unwrap!(ble::run(
+        sd,
+        &LED_INDICATIONS_SIGNAL,
+        &JOYSTICK_SIGNAL
+    )));
+    spawner.spawn(unwrap!(control::run(&JOYSTICK_SIGNAL, r.motor)));
+
+    spawner.spawn(unwrap!(power::run(
+        &LED_INDICATIONS_SIGNAL,
+        r.fuelgauge,
+        r.charger
+    )));
 
     sd.run().await
 }

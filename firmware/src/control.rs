@@ -10,12 +10,12 @@ use crate::{
     MotorResources,
 };
 
-struct Controller<'a, P: pwm::Instance> {
-    pwm: SimplePwm<'a, P>,
+struct Controller<'a> {
+    pwm: SimplePwm<'a>,
     tail_n: gpio::Output<'a>,
 }
 
-impl<'a, P: pwm::Instance> Controller<'a, P> {
+impl<'a> Controller<'a> {
     const RUDDER_SCALE: i32 = 4;
     const PWM_MAX_DUTY: u16 = 1024;
 
@@ -23,7 +23,7 @@ impl<'a, P: pwm::Instance> Controller<'a, P> {
     const CHANNEL_ID_ROTOR2: usize = 1;
     const CHANNEL_ID_TAIL: usize = 2;
 
-    pub fn new(pwm: SimplePwm<'a, P>, tail_n: Output<'a>) -> Self {
+    pub fn new(pwm: SimplePwm<'a>, tail_n: Output<'a>) -> Self {
         pwm.set_max_duty(Self::PWM_MAX_DUTY);
 
         Self { pwm, tail_n }

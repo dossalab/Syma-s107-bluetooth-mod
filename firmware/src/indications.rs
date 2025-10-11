@@ -16,14 +16,11 @@ pub enum IndicationStyle {
 
 pub type LedIndicationsSignal = Signal<CriticalSectionRawMutex, IndicationStyle>;
 
-async fn run_sequencer<'a, T>(
-    pwm: &mut SequencePwm<'a, T>,
+async fn run_sequencer<'a>(
+    pwm: &mut SequencePwm<'a>,
     sequence: &[u16],
     refresh: u32,
-) -> Result<(), pwm::Error>
-where
-    T: pwm::Instance,
-{
+) -> Result<(), pwm::Error> {
     let mut sequence_config = SequenceConfig::default();
     sequence_config.refresh = refresh;
 

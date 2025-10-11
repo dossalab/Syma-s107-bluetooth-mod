@@ -60,12 +60,12 @@ mod blockdefs {
     pub const TAPER_RATE: usize = 21;
 }
 
-struct Fuelgauge<'a, P: twim::Instance> {
+struct Fuelgauge<'a> {
     int: gpio::Input<'a>,
-    gauge: Bq27xx<Twim<'a, P>, embassy_time::Delay>,
+    gauge: Bq27xx<Twim<'a>, embassy_time::Delay>,
 }
 
-impl<'a, P: twim::Instance> Fuelgauge<'a, P> {
+impl<'a> Fuelgauge<'a> {
     async fn print_stats(&mut self) -> Result<(), bq27xxx::ChipError<twim::Error>> {
         info!("battery voltage: {} mV", self.gauge.voltage().await?);
         info!(
@@ -272,7 +272,7 @@ impl<'a, P: twim::Instance> Fuelgauge<'a, P> {
         self.print_stats().await
     }
 
-    fn new(int: gpio::Input<'a>, i2c: twim::Twim<'a, P>) -> Self {
+    fn new(int: gpio::Input<'a>, i2c: twim::Twim<'a>) -> Self {
         const GAUGE_I2C_ADDR: u8 = 0x55;
         Self {
             int,
