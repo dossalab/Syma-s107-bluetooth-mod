@@ -1,4 +1,3 @@
-use cortex_m::peripheral::nvic;
 use defmt::{debug, error, info, warn};
 use embassy_futures::select::{select, Either};
 use embassy_time::{Duration, Timer};
@@ -14,8 +13,7 @@ use nrf_softdevice::{
 };
 use static_cell::StaticCell;
 
-use crate::xbox::JoystickDataSignal;
-use crate::xbox::XboxHidServiceClient;
+use crate::{ble_events::BluetoothEventsProxy, xbox::XboxHidServiceClient};
 use crate::{
     indications::{IndicationStyle, LedIndicationsSignal},
     xbox::{self, XboxHidServiceClientEvent},
@@ -122,13 +120,12 @@ async fn scan(sd: &Softdevice, indications: &'static LedIndicationsSignal) -> Op
     }
 }
 
-async fn wait_connection(
+async fn connect(
     sd: &Softdevice,
     addr: Address,
     bonder: &'static Bonder,
     indications: &'static LedIndicationsSignal,
-    output: &'static JoystickDataSignal,
-) -> Result<(), BleError> {
+) -> Result<ble::Connection, BleError> {
     let whitelist = &[&addr];
     let mut config = central::ConnectConfig::default();
     config.scan_config.whitelist = Some(whitelist);
@@ -156,8 +153,14 @@ async fn wait_connection(
         }
     };
 
-    info!("connected");
+    Ok(conn)
+}
 
+async fn run_services(
+    conn: ble::Connection,
+    proxy: &'static BluetoothEventsProxy,
+    indications: &'static LedIndicationsSignal,
+) -> Result<(), BleError> {
     let client: XboxHidServiceClient = gatt_client::discover(&conn).await?;
 
     debug!("services discovered!");
@@ -181,10 +184,26 @@ async fn wait_connection(
                 cortex_m::peripheral::SCB::sys_reset();
             }
 
-            output.signal(jd);
+            proxy.notify_data(jd);
         }
     })
     .await;
+
+    Ok(())
+}
+
+async fn host_mode(
+    sd: &'static Softdevice,
+    indications: &'static LedIndicationsSignal,
+    events: &'static BluetoothEventsProxy,
+    bonder: &'static Bonder,
+) -> Result<(), BleError> {
+    if let Some(address) = scan(sd, indications).await {
+        let connection = connect(sd, address, bonder, indications).await?;
+        events
+            .notify_connection(async || run_services(connection, events, indications).await)
+            .await?;
+    }
 
     Ok(())
 }
@@ -193,18 +212,15 @@ async fn wait_connection(
 pub async fn run(
     sd: &'static Softdevice,
     indications: &'static LedIndicationsSignal,
-    output: &'static JoystickDataSignal,
+    events: &'static BluetoothEventsProxy,
 ) {
     static BONDER: StaticCell<Bonder> = StaticCell::new();
-
     let bonder = BONDER.init(Bonder::default());
 
     loop {
-        if let Some(address) = scan(sd, indications).await {
-            match wait_connection(sd, address, bonder, indications, output).await {
-                Err(e) => error!("unable to handle connection - {}", e),
-                Ok(_) => {}
-            }
+        match host_mode(sd, indications, events, bonder).await {
+            Err(e) => error!("host mode error - {}", e),
+            _ => {}
         }
     }
 }

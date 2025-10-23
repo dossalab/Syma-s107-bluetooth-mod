@@ -2,7 +2,7 @@
 #![no_main]
 
 use assign_resources::assign_resources;
-use xbox::JoystickDataSignal;
+use ble_events::BluetoothEventsProxy;
 
 use core::panic::PanicInfo;
 use embassy_executor::Spawner;
@@ -15,6 +15,7 @@ use nrf_softdevice::Softdevice;
 use defmt::{info, unwrap};
 
 mod ble;
+mod ble_events;
 mod control;
 mod executor;
 mod indications;
@@ -86,22 +87,15 @@ async fn main(spawner: Spawner) {
 
     info!("ble-copter ({}) is running. Hello!", git_version!());
 
-    static LED_INDICATIONS_SIGNAL: LedIndicationsSignal = Signal::new();
-    static JOYSTICK_SIGNAL: JoystickDataSignal = Signal::new();
+    static LED_INDICATIONS: LedIndicationsSignal = Signal::new();
+    static BLE_EVENTS: BluetoothEventsProxy = BluetoothEventsProxy::new();
 
-    spawner.spawn(unwrap!(indications::run(
-        &LED_INDICATIONS_SIGNAL,
-        r.led_switch
-    )));
-    spawner.spawn(unwrap!(ble::run(
-        sd,
-        &LED_INDICATIONS_SIGNAL,
-        &JOYSTICK_SIGNAL
-    )));
-    spawner.spawn(unwrap!(control::run(&JOYSTICK_SIGNAL, r.motor)));
+    spawner.spawn(unwrap!(indications::run(&LED_INDICATIONS, r.led_switch)));
+    spawner.spawn(unwrap!(ble::run(sd, &LED_INDICATIONS, &BLE_EVENTS)));
+    spawner.spawn(unwrap!(control::run(&BLE_EVENTS, r.motor)));
 
     spawner.spawn(unwrap!(power::run(
-        &LED_INDICATIONS_SIGNAL,
+        &LED_INDICATIONS,
         r.fuelgauge,
         r.charger
     )));

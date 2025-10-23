@@ -2,7 +2,6 @@
 
 use byteorder::{ByteOrder, LittleEndian};
 use defmt::bitflags;
-use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, signal::Signal};
 use nrf_softdevice::gatt_client;
 
 pub const STICKS_RANGE: i32 = 65535;
@@ -32,8 +31,6 @@ pub struct JoystickData {
     pub t2: u16,
     pub buttons: ButtonFlags,
 }
-
-pub type JoystickDataSignal = Signal<CriticalSectionRawMutex, JoystickData>;
 
 impl JoystickData {
     pub fn from_packet(p: &[u8; 16]) -> Self {
