@@ -1,4 +1,4 @@
-use crate::{indications::LedIndicationsSignal, ChargerResources, FuelgaugeResources, Irqs};
+use crate::{indications::LedIndicationsSignal, Irqs, PowerResources};
 use bq27xxx::{memory::MemoryBlock, Bq27xx, ChemId};
 use defmt::{debug, error, info, warn};
 use embassy_futures::select::{select, Either};
@@ -78,7 +78,7 @@ impl<'a> Fuelgauge<'a> {
         Ok(())
     }
 
-    async fn poll(&mut self) -> Result<(), bq27xxx::ChipError<twim::Error>> {
+    async fn wait_int(&mut self) -> Result<(), bq27xxx::ChipError<twim::Error>> {
         let r = select(self.int.wait_for_falling_edge(), Timer::after_secs(1)).await;
 
         match r {
@@ -282,21 +282,17 @@ impl<'a> Fuelgauge<'a> {
 }
 
 #[embassy_executor::task]
-pub async fn run(
-    indications: &'static LedIndicationsSignal,
-    fg: FuelgaugeResources,
-    charger: ChargerResources,
-) {
-    let charger_fault = gpio::Input::new(charger.fault, gpio::Pull::Up);
-    let charger_charging = gpio::Input::new(charger.charging, gpio::Pull::Up);
-    let fuelgauge_int = gpio::Input::new(fg.int, gpio::Pull::Up);
+pub async fn run(indications: &'static LedIndicationsSignal, r: PowerResources) {
+    let charger_fault = gpio::Input::new(r.fault_int, gpio::Pull::Up);
+    let charger_charging = gpio::Input::new(r.charging_int, gpio::Pull::Up);
+    let fuelgauge_int = gpio::Input::new(r.fuelgauge_int, gpio::Pull::Up);
 
     let mut i2c_buffer = [0; 64];
     let i2c = Twim::new(
-        fg.i2c,
+        r.i2c,
         Irqs,
-        fg.sda,
-        fg.scl,
+        r.sda,
+        r.scl,
         twim::Config::default(),
         &mut i2c_buffer,
     );
@@ -311,6 +307,6 @@ pub async fn run(
     }
 
     loop {
-        select(charger.poll(), fuelgauge.poll()).await;
+        select(charger.poll(), fuelgauge.wait_int()).await;
     }
 }

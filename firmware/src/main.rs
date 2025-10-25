@@ -41,15 +41,13 @@ assign_resources! {
         switch: P0_05,
         pwm: PWM1
     },
-    fuelgauge: FuelgaugeResources {
+    power: PowerResources {
         i2c: TWISPI0,
-        int: P0_06,
         sda: P0_07,
         scl: P0_08,
-    },
-    charger: ChargerResources {
-        charging: P0_11,
-        fault: P0_12
+        fuelgauge_int: P0_06,
+        charging_int: P0_11,
+        fault_int: P0_12
     },
     gyro: GyroResources {
         power: P0_26,
@@ -101,10 +99,5 @@ async fn main(spawner: Spawner) {
     spawner.spawn(unwrap!(indications::run(&LED_INDICATIONS, r.led_switch)));
     spawner.spawn(unwrap!(ble::run(sd, &LED_INDICATIONS, &BLE_EVENTS)));
     spawner.spawn(unwrap!(control::run(&BLE_EVENTS, r.motor)));
-
-    spawner.spawn(unwrap!(power::run(
-        &LED_INDICATIONS,
-        r.fuelgauge,
-        r.charger
-    )));
+    spawner.spawn(unwrap!(power::run(&LED_INDICATIONS, r.power,)));
 }
