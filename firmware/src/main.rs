@@ -3,15 +3,18 @@
 
 use assign_resources::assign_resources;
 use ble_events::BluetoothEventsProxy;
+use static_cell::StaticCell;
 
 use core::panic::PanicInfo;
 use embassy_executor::Spawner;
 use embassy_nrf::{
     bind_interrupts,
     interrupt::{self, InterruptExt},
-    peripherals, twim, Peri,
+    peripherals,
+    twim::{self, Twim},
+    Peri,
 };
-use embassy_sync::signal::Signal;
+use embassy_sync::{blocking_mutex::raw::NoopRawMutex, mutex::Mutex, signal::Signal};
 use git_version::git_version;
 use indications::LedIndicationsSignal;
 use nrf_softdevice::{raw, Softdevice};
@@ -27,6 +30,8 @@ mod power;
 mod xbox;
 
 use defmt_rtt as _;
+
+type SharedI2cBus = Mutex<NoopRawMutex, Twim<'static>>;
 
 bind_interrupts!(struct Irqs {
     TWISPI0 => twim::InterruptHandler<peripherals::TWISPI0>;
@@ -45,11 +50,13 @@ assign_resources! {
         switch: P0_05,
         pwm: PWM1
     },
-    power: PowerResources {
+    i2c: I2cResources {
         // make sure to check interrupt priority below if changing
         i2c: TWISPI0,
         sda: P0_07,
         scl: P0_08,
+    },
+    power: PowerResources {
         fuelgauge_int: P0_06,
         charging_int: P0_11,
         fault_int: P0_12
@@ -94,9 +101,28 @@ fn hw_init() -> (AssignedResources, &'static mut Softdevice) {
     (split_resources!(p), sd)
 }
 
+fn make_shared_i2c(r: I2cResources) -> &'static SharedI2cBus {
+    const BUFFER_LEN: usize = 64;
+
+    static BUS: StaticCell<SharedI2cBus> = StaticCell::new();
+    static BUFFER: StaticCell<[u8; BUFFER_LEN]> = StaticCell::new();
+
+    let i2c = Twim::new(
+        r.i2c,
+        Irqs,
+        r.sda,
+        r.scl,
+        twim::Config::default(),
+        BUFFER.init([0; BUFFER_LEN]),
+    );
+
+    BUS.init(Mutex::new(i2c))
+}
+
 #[embassy_executor::main(executor = "executor::MwuWorkaroundExecutor")]
 async fn main(spawner: Spawner) {
     let (r, sd) = hw_init();
+    let i2c = make_shared_i2c(r.i2c);
 
     info!("ble-copter ({}) is running. Hello!", git_version!());
 
@@ -106,5 +132,5 @@ async fn main(spawner: Spawner) {
     spawner.spawn(unwrap!(indications::run(&LED_INDICATIONS, r.led_switch)));
     spawner.spawn(unwrap!(ble::run(sd, &LED_INDICATIONS, &BLE_EVENTS)));
     spawner.spawn(unwrap!(control::run(&BLE_EVENTS, r.motor)));
-    spawner.spawn(unwrap!(power::run(&LED_INDICATIONS, r.power,)));
+    spawner.spawn(unwrap!(power::run(&LED_INDICATIONS, r.power, i2c)));
 }

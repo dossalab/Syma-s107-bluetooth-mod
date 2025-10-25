@@ -1,12 +1,11 @@
-use crate::{indications::LedIndicationsSignal, Irqs, PowerResources};
+use crate::{indications::LedIndicationsSignal, PowerResources, SharedI2cBus};
 use bq27xxx::{memory::MemoryBlock, Bq27xx, ChemId};
 use defmt::{debug, error, info, warn};
+use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice;
 use embassy_futures::select::{select, Either};
-use embassy_nrf::{
-    gpio,
-    twim::{self, Twim},
-};
+use embassy_nrf::gpio;
 use embassy_time::Timer;
+use embedded_hal_async::i2c;
 
 struct Charger<'a> {
     fault: gpio::Input<'a>,
@@ -60,13 +59,16 @@ mod blockdefs {
     pub const TAPER_RATE: usize = 21;
 }
 
-struct Fuelgauge<'a> {
+struct Fuelgauge<'a, E, I: i2c::I2c<Error = E>> {
     int: gpio::Input<'a>,
-    gauge: Bq27xx<Twim<'a>, embassy_time::Delay>,
+    gauge: Bq27xx<I, embassy_time::Delay>,
 }
 
-impl<'a> Fuelgauge<'a> {
-    async fn print_stats(&mut self) -> Result<(), bq27xxx::ChipError<twim::Error>> {
+impl<'a, E, I> Fuelgauge<'a, E, I>
+where
+    I: i2c::I2c<Error = E>,
+{
+    async fn print_stats(&mut self) -> Result<(), bq27xxx::ChipError<E>> {
         info!("battery voltage: {} mV", self.gauge.voltage().await?);
         info!(
             "battery current: {} mA",
@@ -78,7 +80,7 @@ impl<'a> Fuelgauge<'a> {
         Ok(())
     }
 
-    async fn wait_int(&mut self) -> Result<(), bq27xxx::ChipError<twim::Error>> {
+    async fn wait_int(&mut self) -> Result<(), bq27xxx::ChipError<E>> {
         let r = select(self.int.wait_for_falling_edge(), Timer::after_secs(1)).await;
 
         match r {
@@ -144,7 +146,7 @@ impl<'a> Fuelgauge<'a> {
         block.raw[blockdefs::UPDATE_STATUS] = status;
     }
 
-    async fn set_battery_state(&mut self) -> Result<(), bq27xxx::ChipError<twim::Error>> {
+    async fn set_battery_state(&mut self) -> Result<(), bq27xxx::ChipError<E>> {
         const BATTERY_CAPACITY: u16 = 500;
         const BATTERY_ENERGY: u16 = 1850; // capacity * 3.7
         const BATTERY_TERM_V: u16 = 3600; // could be lower, but I doubt we'll be able to fly at such low voltages
@@ -215,7 +217,7 @@ impl<'a> Fuelgauge<'a> {
         Self::write_u16(block, 4, v)
     }
 
-    async fn set_current_thresholds(&mut self) -> Result<(), bq27xxx::ChipError<twim::Error>> {
+    async fn set_current_thresholds(&mut self) -> Result<(), bq27xxx::ChipError<E>> {
         let mut block = self
             .gauge
             .memblock_read(blockdefs::CURRENT_THRESHOLDS, 0)
@@ -255,7 +257,7 @@ impl<'a> Fuelgauge<'a> {
         Ok(())
     }
 
-    async fn probe(&mut self) -> Result<(), bq27xxx::ChipError<twim::Error>> {
+    async fn probe(&mut self) -> Result<(), bq27xxx::ChipError<E>> {
         self.gauge.probe().await?;
 
         self.set_battery_state().await?;
@@ -272,7 +274,7 @@ impl<'a> Fuelgauge<'a> {
         self.print_stats().await
     }
 
-    fn new(int: gpio::Input<'a>, i2c: twim::Twim<'a>) -> Self {
+    fn new(int: gpio::Input<'a>, i2c: I) -> Self {
         const GAUGE_I2C_ADDR: u8 = 0x55;
         Self {
             int,
@@ -282,25 +284,21 @@ impl<'a> Fuelgauge<'a> {
 }
 
 #[embassy_executor::task]
-pub async fn run(indications: &'static LedIndicationsSignal, r: PowerResources) {
+pub async fn run(
+    indications: &'static LedIndicationsSignal,
+    r: PowerResources,
+    i2c: &'static SharedI2cBus,
+) {
     let charger_fault = gpio::Input::new(r.fault_int, gpio::Pull::Up);
     let charger_charging = gpio::Input::new(r.charging_int, gpio::Pull::Up);
     let fuelgauge_int = gpio::Input::new(r.fuelgauge_int, gpio::Pull::Up);
 
-    let mut i2c_buffer = [0; 64];
-    let i2c = Twim::new(
-        r.i2c,
-        Irqs,
-        r.sda,
-        r.scl,
-        twim::Config::default(),
-        &mut i2c_buffer,
-    );
+    let dev = I2cDevice::new(i2c);
 
     info!("running power task");
 
     let mut charger = Charger::new(charger_fault, charger_charging);
-    let mut fuelgauge = Fuelgauge::new(fuelgauge_int, i2c);
+    let mut fuelgauge = Fuelgauge::new(fuelgauge_int, dev);
 
     if fuelgauge.probe().await.is_err() {
         error!("fuelgauge initialization failure");

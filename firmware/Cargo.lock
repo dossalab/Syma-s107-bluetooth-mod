@@ -73,6 +73,7 @@ dependencies = [
  "cortex-m-rt",
  "defmt 1.0.1",
  "defmt-rtt",
+ "embassy-embedded-hal 0.5.0 (git+https://github.com/embassy-rs/embassy)",
  "embassy-executor",
  "embassy-futures 0.1.2 (git+https://github.com/dossalab/embassy?branch=rliutko%2Fnrf52832-inverted-pwm)",
  "embassy-nrf",
@@ -322,9 +323,25 @@ source = "git+https://github.com/dossalab/embassy?branch=rliutko%2Fnrf52832-inve
 dependencies = [
  "defmt 1.0.1",
  "embassy-futures 0.1.2 (git+https://github.com/dossalab/embassy?branch=rliutko%2Fnrf52832-inverted-pwm)",
- "embassy-hal-internal",
+ "embassy-hal-internal 0.3.0 (git+https://github.com/dossalab/embassy?branch=rliutko%2Fnrf52832-inverted-pwm)",
  "embassy-sync 0.7.2",
  "embassy-time",
+ "embedded-hal 0.2.7",
+ "embedded-hal 1.0.0",
+ "embedded-hal-async",
+ "embedded-storage",
+ "embedded-storage-async",
+ "nb 1.1.0",
+]
+
+[[package]]
+name = "embassy-embedded-hal"
+version = "0.5.0"
+source = "git+https://github.com/embassy-rs/embassy#c8c4c6f40bd8a2e548f3c8e06b798d448f67b884"
+dependencies = [
+ "embassy-futures 0.1.2 (git+https://github.com/dossalab/embassy?branch=rliutko%2Fnrf52832-inverted-pwm)",
+ "embassy-hal-internal 0.3.0 (git+https://github.com/embassy-rs/embassy)",
+ "embassy-sync 0.7.2",
  "embedded-hal 0.2.7",
  "embedded-hal 1.0.0",
  "embedded-hal-async",
@@ -386,6 +403,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "embassy-hal-internal"
+version = "0.3.0"
+source = "git+https://github.com/embassy-rs/embassy#c8c4c6f40bd8a2e548f3c8e06b798d448f67b884"
+dependencies = [
+ "num-traits",
+]
+
+[[package]]
 name = "embassy-nrf"
 version = "0.8.0"
 source = "git+https://github.com/dossalab/embassy?branch=rliutko%2Fnrf52832-inverted-pwm#7829a258b36c2d8a78c16413c7fd5ab508701e4f"
@@ -397,8 +422,8 @@ dependencies = [
  "critical-section",
  "defmt 1.0.1",
  "document-features",
- "embassy-embedded-hal",
- "embassy-hal-internal",
+ "embassy-embedded-hal 0.5.0 (git+https://github.com/dossalab/embassy?branch=rliutko%2Fnrf52832-inverted-pwm)",
+ "embassy-hal-internal 0.3.0 (git+https://github.com/dossalab/embassy?branch=rliutko%2Fnrf52832-inverted-pwm)",
  "embassy-sync 0.7.2",
  "embassy-time-driver",
  "embassy-time-queue-utils",

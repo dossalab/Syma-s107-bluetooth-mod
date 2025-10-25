@@ -56,6 +56,9 @@ git = "https://github.com/embassy-rs/embassy"
 [dependencies.embassy-time]
 git = "https://github.com/embassy-rs/embassy"
 
+[dependencies.embassy-embedded-hal]
+git = "https://github.com/embassy-rs/embassy"
+
 [dependencies.nrf-softdevice]
 git = "https://github.com/dossalab/nrf-softdevice"
 features = [ "s132", "ble-gatt-client", "ble-gatt-server", "ble-central", "ble-peripheral", "ble-sec", "critical-section-impl" ]
