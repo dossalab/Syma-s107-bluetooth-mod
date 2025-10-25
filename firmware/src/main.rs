@@ -6,7 +6,11 @@ use ble_events::BluetoothEventsProxy;
 
 use core::panic::PanicInfo;
 use embassy_executor::Spawner;
-use embassy_nrf::{bind_interrupts, interrupt, peripherals, twim, Peri};
+use embassy_nrf::{
+    bind_interrupts,
+    interrupt::{self, InterruptExt},
+    peripherals, twim, Peri,
+};
 use embassy_sync::signal::Signal;
 use git_version::git_version;
 use indications::LedIndicationsSignal;
@@ -42,6 +46,7 @@ assign_resources! {
         pwm: PWM1
     },
     power: PowerResources {
+        // make sure to check interrupt priority below if changing
         i2c: TWISPI0,
         sda: P0_07,
         scl: P0_08,
@@ -72,6 +77,8 @@ fn hw_init() -> (AssignedResources, &'static mut Softdevice) {
      */
     config.gpiote_interrupt_priority = interrupt::Priority::P2;
     config.time_interrupt_priority = interrupt::Priority::P2;
+
+    interrupt::TWISPI0.set_priority(interrupt::Priority::P2);
 
     let sd_config = nrf_softdevice::Config {
         conn_gap: Some(raw::ble_gap_conn_cfg_t {
