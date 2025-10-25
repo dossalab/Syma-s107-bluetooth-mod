@@ -63,6 +63,30 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "812e12b5285cc515a9c72a5c1d3b6d46a19dac5acfef5265968c166106e31dd3"
 
 [[package]]
+name = "ble-copter"
+version = "0.1.0"
+dependencies = [
+ "assign-resources",
+ "bq27xxx",
+ "byteorder",
+ "cortex-m",
+ "cortex-m-rt",
+ "defmt 1.0.1",
+ "defmt-rtt",
+ "embassy-executor",
+ "embassy-futures 0.1.2 (git+https://github.com/dossalab/embassy?branch=rliutko%2Fnrf52832-inverted-pwm)",
+ "embassy-nrf",
+ "embassy-sync 0.7.2",
+ "embassy-time",
+ "embedded-hal-async",
+ "futures",
+ "git-version",
+ "nrf-softdevice",
+ "panic-probe",
+ "static_cell",
+]
+
+[[package]]
 name = "bq27xxx"
 version = "0.0.2"
 source = "git+https://github.com/dossalab/bq27xxx-rs#0bebfc8c45639a943d45500f376b600f65f30f83"
@@ -93,9 +117,9 @@ checksum = "1fd0f2584146f6f2ef48085050886acf353beff7305ebd1ae69500e27c67f64b"
 
 [[package]]
 name = "cc"
-version = "1.2.41"
+version = "1.2.43"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ac9fe6cdbb24b6ade63616c0a0688e45bb56732262c158df3c0c4bea4ca47cb7"
+checksum = "739eb0f94557554b3ca9a86d2d37bebd49c5e6d0c1d2bda35ba5bdac830befc2"
 dependencies = [
  "find-msvc-tools",
  "shlex",
@@ -284,9 +308,9 @@ dependencies = [
 
 [[package]]
 name = "document-features"
-version = "0.2.11"
+version = "0.2.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "95249b50c6c185bee49034bcb378a49dc2b5dff0be90ff6616d31d64febab05d"
+checksum = "d4b8a88685455ed29a21542a33abd9cb6510b6b129abadabdcef0f4c55bc8f61"
 dependencies = [
  "litrs",
 ]
@@ -700,9 +724,9 @@ checksum = "2874a2af47a2325c2001a6e6fad9b16a53b802102b528163885171cf92b15976"
 
 [[package]]
 name = "litrs"
-version = "0.4.2"
+version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f5e54036fe321fd421e10d732f155734c4e4afd610dd556d9a82833ab3ee0bed"
+checksum = "11d3d7f243d5c5a8b9bb5d6dd2b1602c0cb0b9db1621bafc7ed66e35ff9fe092"
 
 [[package]]
 name = "log"
@@ -737,30 +761,6 @@ name = "memchr"
 version = "2.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f52b00d39961fc5b2736ea853c9cc86238e165017a493d1d5c8eac6bdc4cc273"
-
-[[package]]
-name = "minibox"
-version = "0.1.0"
-dependencies = [
- "assign-resources",
- "bq27xxx",
- "byteorder",
- "cortex-m",
- "cortex-m-rt",
- "defmt 1.0.1",
- "defmt-rtt",
- "embassy-executor",
- "embassy-futures 0.1.2 (git+https://github.com/dossalab/embassy?branch=rliutko%2Fnrf52832-inverted-pwm)",
- "embassy-nrf",
- "embassy-sync 0.7.2",
- "embassy-time",
- "embedded-hal-async",
- "futures",
- "git-version",
- "nrf-softdevice",
- "panic-probe",
- "static_cell",
-]
 
 [[package]]
 name = "nb"

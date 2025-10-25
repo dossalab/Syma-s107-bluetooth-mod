@@ -1,6 +1,6 @@
 [package]
 edition = "2021"
-name = "minibox"
+name = "ble-copter"
 version = "0.1.0"
 
 [profile.dev]
