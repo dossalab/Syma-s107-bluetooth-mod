@@ -1,11 +1,17 @@
-use defmt::{debug, error, info, warn};
+use defmt::{debug, error, info, unwrap, warn};
+use embassy_futures::join::join3;
 use embassy_futures::select::{select, Either};
 use embassy_time::{Duration, Timer};
+use nrf_softdevice::ble::advertisement_builder::{
+    Flag, LegacyAdvertisementBuilder, LegacyAdvertisementPayload, ServiceList, ServiceUuid16,
+};
+use nrf_softdevice::ble::peripheral::{self, AdvertiseError};
 use nrf_softdevice::{
     ble::{
         self,
         central::{self, ConnectError},
         gatt_client::{self, DiscoverError},
+        gatt_server,
         security::SecurityHandler,
         Address, AddressType, EncryptError, EncryptionInfo,
     },
@@ -46,15 +52,16 @@ impl SecurityHandler for Bonder {
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 enum BleError {
     Encryption(ble::EncryptError),
-    ConnectError,
+    ConnectError(ConnectError),
     DiscoveryError,
     WriteError(gatt_client::WriteError),
     ReadError(gatt_client::ReadError),
+    AdvertiseError(AdvertiseError),
 }
 
 impl From<ConnectError> for BleError {
-    fn from(_: ConnectError) -> Self {
-        return Self::ConnectError;
+    fn from(e: ConnectError) -> Self {
+        return Self::ConnectError(e);
     }
 }
 
@@ -76,9 +83,20 @@ impl From<gatt_client::ReadError> for BleError {
     }
 }
 
+impl From<AdvertiseError> for BleError {
+    fn from(e: AdvertiseError) -> Self {
+        return Self::AdvertiseError(e);
+    }
+}
+
 // Scan for Xbox controllers
 async fn scan(sd: &Softdevice, indications: &'static LedIndicationsSignal) -> Option<Address> {
-    let config = central::ScanConfig::default();
+    let config = central::ScanConfig {
+        interval: 3200, // *0.625 us
+        window: 160,    // *0.625us
+        ..central::ScanConfig::default()
+    };
+
     let timeout = Duration::from_secs(10);
 
     let do_scan = async || loop {
@@ -192,35 +210,95 @@ async fn run_services(
     Ok(())
 }
 
-async fn host_mode(
+#[nrf_softdevice::gatt_service(uuid = "180f")]
+struct BatteryService {
+    #[characteristic(uuid = "2a19", read, notify)]
+    battery_level: u8,
+}
+
+#[nrf_softdevice::gatt_server]
+struct TelemetryServer {
+    bas: BatteryService,
+}
+
+async fn peripheral_loop(sd: &Softdevice, server: TelemetryServer) {
+    let handle_connection = async |conn: &ble::Connection| {
+        gatt_server::run(conn, &server, |e| match e {
+            TelemetryServerEvent::Bas(e) => match e {
+                BatteryServiceEvent::BatteryLevelCccdWrite { notifications } => {
+                    info!("battery notifications: {}", notifications)
+                }
+            },
+        })
+        .await;
+    };
+
+    static ADV_DATA: LegacyAdvertisementPayload = LegacyAdvertisementBuilder::new()
+        .flags(&[Flag::GeneralDiscovery, Flag::LE_Only])
+        .services_16(ServiceList::Complete, &[ServiceUuid16::HEALTH_THERMOMETER])
+        .short_name("Hello")
+        .build();
+
+    let config = peripheral::Config {
+        interval: 1600, // * 0.625us
+        ..peripheral::Config::default()
+    };
+
+    let adv = peripheral::ConnectableAdvertisement::ScannableUndirected {
+        adv_data: &ADV_DATA,
+        scan_data: &SCAN_DATA,
+    };
+
+    static SCAN_DATA: LegacyAdvertisementPayload = LegacyAdvertisementBuilder::new()
+        .full_name("Hello, Rust!")
+        .build();
+
+    loop {
+        match peripheral::advertise_connectable(sd, adv, &config).await {
+            Ok(conn) => handle_connection(&conn).await,
+            Err(e) => error!("unable to advertise - {}", e),
+        };
+    }
+}
+
+async fn central_loop(
     sd: &'static Softdevice,
     indications: &'static LedIndicationsSignal,
     events: &'static BluetoothEventsProxy,
     bonder: &'static Bonder,
-) -> Result<(), BleError> {
-    if let Some(address) = scan(sd, indications).await {
-        let connection = connect(sd, address, bonder, indications).await?;
-        events
-            .notify_connection(async || run_services(connection, events, indications).await)
-            .await?;
-    }
+) {
+    let scan_connect = async || -> Result<(), BleError> {
+        if let Some(address) = scan(sd, indications).await {
+            let connection = connect(sd, address, bonder, indications).await?;
+            events
+                .notify_connection(async || run_services(connection, events, indications).await)
+                .await?;
+        }
 
-    Ok(())
+        Ok(())
+    };
+
+    loop {
+        if let Err(e) = scan_connect().await {
+            error!("search loop error - {}", e)
+        }
+    }
 }
 
 #[embassy_executor::task]
 pub async fn run(
-    sd: &'static Softdevice,
+    sd: &'static mut Softdevice,
     indications: &'static LedIndicationsSignal,
     events: &'static BluetoothEventsProxy,
 ) {
     static BONDER: StaticCell<Bonder> = StaticCell::new();
     let bonder = BONDER.init(Bonder::default());
+    let server = unwrap!(TelemetryServer::new(sd));
 
-    loop {
-        match host_mode(sd, indications, events, bonder).await {
-            Err(e) => error!("host mode error - {}", e),
-            _ => {}
-        }
-    }
+    join3(
+        central_loop(sd, indications, events, bonder),
+        peripheral_loop(sd, server),
+        sd.run(),
+    )
+    .await;
 }

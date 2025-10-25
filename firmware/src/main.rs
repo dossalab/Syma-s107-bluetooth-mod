@@ -10,7 +10,7 @@ use embassy_nrf::{bind_interrupts, interrupt, peripherals, twim, Peri};
 use embassy_sync::signal::Signal;
 use git_version::git_version;
 use indications::LedIndicationsSignal;
-use nrf_softdevice::Softdevice;
+use nrf_softdevice::{raw, Softdevice};
 
 use defmt::{info, unwrap};
 
@@ -64,7 +64,7 @@ fn panic(_info: &PanicInfo) -> ! {
     cortex_m::peripheral::SCB::sys_reset();
 }
 
-fn hw_init() -> (AssignedResources, &'static Softdevice) {
+fn hw_init() -> (AssignedResources, &'static mut Softdevice) {
     let mut config = embassy_nrf::config::Config::default();
 
     /*
@@ -75,8 +75,16 @@ fn hw_init() -> (AssignedResources, &'static Softdevice) {
     config.gpiote_interrupt_priority = interrupt::Priority::P2;
     config.time_interrupt_priority = interrupt::Priority::P2;
 
+    let sd_config = nrf_softdevice::Config {
+        conn_gap: Some(raw::ble_gap_conn_cfg_t {
+            conn_count: 2,
+            event_length: 24,
+        }),
+        ..nrf_softdevice::Config::default()
+    };
+
     let p = embassy_nrf::init(config);
-    let sd = Softdevice::enable(&nrf_softdevice::Config::default());
+    let sd = Softdevice::enable(&sd_config);
 
     (split_resources!(p), sd)
 }
@@ -99,6 +107,4 @@ async fn main(spawner: Spawner) {
         r.fuelgauge,
         r.charger
     )));
-
-    sd.run().await
 }
