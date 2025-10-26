@@ -89,8 +89,7 @@ dependencies = [
 
 [[package]]
 name = "bq27xxx"
-version = "0.0.2"
-source = "git+https://github.com/dossalab/bq27xxx-rs#0bebfc8c45639a943d45500f376b600f65f30f83"
+version = "1.0.0"
 dependencies = [
  "bitflags 1.3.2",
  "byteorder",

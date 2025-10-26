@@ -3,6 +3,7 @@
 
 use assign_resources::assign_resources;
 use ble::events::BluetoothEventsProxy;
+use power::stats::PowerStats;
 use static_cell::StaticCell;
 
 use core::panic::PanicInfo;
@@ -125,11 +126,19 @@ async fn main(spawner: Spawner) {
 
     info!("ble-copter ({}) is running. Hello!", git_version!());
 
+    static POWER_STATS: StaticCell<PowerStats> = StaticCell::new();
+    let power_stats = POWER_STATS.init(PowerStats::new());
+
     static LED_INDICATIONS: LedIndicationsSignal = Signal::new();
     static BLE_EVENTS: BluetoothEventsProxy = BluetoothEventsProxy::new();
 
     spawner.spawn(unwrap!(indications::run(&LED_INDICATIONS, r.led_switch)));
-    spawner.spawn(unwrap!(ble::run(sd, &LED_INDICATIONS, &BLE_EVENTS)));
+    spawner.spawn(unwrap!(ble::run(
+        sd,
+        power_stats,
+        &LED_INDICATIONS,
+        &BLE_EVENTS
+    )));
     spawner.spawn(unwrap!(control::run(&BLE_EVENTS, r.motor)));
-    spawner.spawn(unwrap!(power::run(&LED_INDICATIONS, r.power, i2c)));
+    spawner.spawn(unwrap!(power::run(power_stats, r.power, i2c)));
 }

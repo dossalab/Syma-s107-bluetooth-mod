@@ -1,4 +1,4 @@
-use nrf_softdevice::ble::{self, central, gatt_client, peripheral};
+use nrf_softdevice::ble::{self, central, gatt_client, gatt_server, peripheral};
 
 #[derive(defmt::Format)]
 pub enum BleError {
@@ -8,6 +8,8 @@ pub enum BleError {
     WriteError(gatt_client::WriteError),
     ReadError(gatt_client::ReadError),
     AdvertiseError(peripheral::AdvertiseError),
+    NotifyValueError(gatt_server::NotifyValueError),
+    SetValueError(gatt_server::SetValueError),
 }
 
 impl From<central::ConnectError> for BleError {
@@ -37,5 +39,17 @@ impl From<gatt_client::ReadError> for BleError {
 impl From<peripheral::AdvertiseError> for BleError {
     fn from(e: peripheral::AdvertiseError) -> Self {
         return Self::AdvertiseError(e);
+    }
+}
+
+impl From<gatt_server::SetValueError> for BleError {
+    fn from(value: gatt_server::SetValueError) -> Self {
+        return Self::SetValueError(value);
+    }
+}
+
+impl From<gatt_server::NotifyValueError> for BleError {
+    fn from(value: gatt_server::NotifyValueError) -> Self {
+        return Self::NotifyValueError(value);
     }
 }
