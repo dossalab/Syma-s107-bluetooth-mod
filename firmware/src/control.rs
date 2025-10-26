@@ -5,7 +5,7 @@ use embassy_nrf::{
 };
 use embassy_time::{Duration, Timer};
 
-use crate::{ble_events::BluetoothEventsProxy, xbox::JoystickData, MotorResources};
+use crate::{ble::events::BluetoothEventsProxy, xbox::JoystickData, MotorResources};
 
 const CHANNEL_ID_ROTOR1: usize = 0;
 const CHANNEL_ID_ROTOR2: usize = 1;

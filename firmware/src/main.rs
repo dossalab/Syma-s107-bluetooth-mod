@@ -2,7 +2,7 @@
 #![no_main]
 
 use assign_resources::assign_resources;
-use ble_events::BluetoothEventsProxy;
+use ble::events::BluetoothEventsProxy;
 use static_cell::StaticCell;
 
 use core::panic::PanicInfo;
@@ -22,7 +22,6 @@ use nrf_softdevice::{raw, Softdevice};
 use defmt::{info, unwrap};
 
 mod ble;
-mod ble_events;
 mod control;
 mod executor;
 mod indications;
