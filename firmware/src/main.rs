@@ -3,6 +3,7 @@
 
 use assign_resources::assign_resources;
 use ble::events::BluetoothEventsProxy;
+use bus::MessageBus;
 use static_cell::StaticCell;
 
 use core::panic::PanicInfo;
@@ -22,6 +23,7 @@ use nrf_softdevice::{raw, Softdevice};
 use defmt::{info, unwrap};
 
 mod ble;
+mod bus;
 mod control;
 mod executor;
 mod indications;
@@ -125,11 +127,12 @@ async fn main(spawner: Spawner) {
 
     info!("ble-copter ({}) is running. Hello!", git_version!());
 
+    static BUS: MessageBus = MessageBus::new();
     static LED_INDICATIONS: LedIndicationsSignal = Signal::new();
     static BLE_EVENTS: BluetoothEventsProxy = BluetoothEventsProxy::new();
 
     spawner.spawn(unwrap!(indications::run(&LED_INDICATIONS, r.led_switch)));
-    spawner.spawn(unwrap!(ble::run(sd, &LED_INDICATIONS, &BLE_EVENTS)));
+    spawner.spawn(unwrap!(ble::run(sd, &LED_INDICATIONS, &BUS, &BLE_EVENTS)));
     spawner.spawn(unwrap!(control::run(&BLE_EVENTS, r.motor)));
-    spawner.spawn(unwrap!(power::run(&LED_INDICATIONS, r.power, i2c)));
+    spawner.spawn(unwrap!(power::run(unwrap!(BUS.publisher()), r.power, i2c)));
 }

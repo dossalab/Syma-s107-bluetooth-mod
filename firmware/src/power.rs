@@ -1,4 +1,7 @@
-use crate::{indications::LedIndicationsSignal, PowerResources, SharedI2cBus};
+use crate::{
+    bus::{BusEvent, BusMessage, BusPublisher},
+    PowerResources, SharedI2cBus,
+};
 use bq27xxx::{memory::MemoryBlock, Bq27xx, ChemId};
 use defmt::{debug, error, info, warn};
 use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice;
@@ -25,7 +28,7 @@ impl<'a> Charger<'a> {
         self.charging.is_low()
     }
 
-    async fn poll(&mut self) {
+    async fn poll(&mut self, publisher: &'a BusPublisher<'a>) {
         let fault_fut = self.fault.wait_for_any_edge();
         let status_fut = self.charging.wait_for_any_edge();
 
@@ -37,7 +40,11 @@ impl<'a> Charger<'a> {
                 }
             }
             Either::Second(_) => {
-                if self.is_charging() {
+                let is_charging = self.is_charging();
+                publisher
+                    .publish_immediate(BusMessage::Event(BusEvent::ChargerStatus(is_charging)));
+
+                if is_charging {
                     info!("charging started")
                 } else {
                     info!("charging stop")
@@ -68,19 +75,31 @@ impl<'a, E, I> Fuelgauge<'a, E, I>
 where
     I: i2c::I2c<Error = E>,
 {
-    async fn print_stats(&mut self) -> Result<(), bq27xxx::ChipError<E>> {
-        info!("battery voltage: {} mV", self.gauge.voltage().await?);
+    async fn print_stats(
+        &mut self,
+        publisher: &BusPublisher<'a>,
+    ) -> Result<(), bq27xxx::ChipError<E>> {
+        let soc = self.gauge.state_of_charge().await?;
+        let voltage = self.gauge.voltage().await?;
+
+        info!("battery voltage: {} mV", voltage);
         info!(
             "battery current: {} mA",
             self.gauge.average_current().await?
         );
-        info!("state of charge: {} %", self.gauge.state_of_charge().await?);
+        info!("state of charge: {} %", soc);
         info!("flags are [{}]", self.gauge.get_flags().await?);
+
+        publisher.publish_immediate(BusMessage::Event(BusEvent::Soc(soc as u8)));
+        publisher.publish_immediate(BusMessage::Event(BusEvent::BatteryVoltage(voltage as u32)));
 
         Ok(())
     }
 
-    async fn wait_int(&mut self) -> Result<(), bq27xxx::ChipError<E>> {
+    async fn wait_int(
+        &mut self,
+        publisher: &BusPublisher<'a>,
+    ) -> Result<(), bq27xxx::ChipError<E>> {
         let r = select(self.int.wait_for_falling_edge(), Timer::after_secs(1)).await;
 
         match r {
@@ -90,7 +109,7 @@ where
             Either::Second(_) => {}
         }
 
-        self.print_stats().await
+        self.print_stats(publisher).await
     }
 
     fn write_u16(block: &mut MemoryBlock, at: usize, value: u16) {
@@ -271,7 +290,7 @@ where
             }
         }
 
-        self.print_stats().await
+        Ok(())
     }
 
     fn new(int: gpio::Input<'a>, i2c: I) -> Self {
@@ -284,11 +303,7 @@ where
 }
 
 #[embassy_executor::task]
-pub async fn run(
-    indications: &'static LedIndicationsSignal,
-    r: PowerResources,
-    i2c: &'static SharedI2cBus,
-) {
+pub async fn run(publisher: BusPublisher<'static>, r: PowerResources, i2c: &'static SharedI2cBus) {
     let charger_fault = gpio::Input::new(r.fault_int, gpio::Pull::Up);
     let charger_charging = gpio::Input::new(r.charging_int, gpio::Pull::Up);
     let fuelgauge_int = gpio::Input::new(r.fuelgauge_int, gpio::Pull::Up);
@@ -305,6 +320,6 @@ pub async fn run(
     }
 
     loop {
-        select(charger.poll(), fuelgauge.wait_int()).await;
+        select(charger.poll(&publisher), fuelgauge.wait_int(&publisher)).await;
     }
 }

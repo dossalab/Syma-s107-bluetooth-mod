@@ -6,7 +6,7 @@ use nrf_softdevice::Softdevice;
 use peripheral::{peripheral_loop, GattServer};
 use static_cell::StaticCell;
 
-use crate::indications::LedIndicationsSignal;
+use crate::{bus::MessageBus, indications::LedIndicationsSignal};
 
 mod central;
 mod errors;
@@ -18,6 +18,7 @@ pub mod events;
 pub async fn run(
     sd: &'static mut Softdevice,
     indications: &'static LedIndicationsSignal,
+    pubsub: &'static MessageBus,
     events: &'static BluetoothEventsProxy,
 ) {
     static BONDER: StaticCell<Bonder> = StaticCell::new();
@@ -26,7 +27,7 @@ pub async fn run(
 
     join3(
         central_loop(sd, indications, events, bonder),
-        peripheral_loop(sd, server),
+        peripheral_loop(sd, pubsub, server),
         sd.run(),
     )
     .await;
