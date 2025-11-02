@@ -26,7 +26,10 @@ pub struct PowerService {
     charger_connected: bool,
 
     #[characteristic(uuid = "38924a07-23d7-43fe-af5d-9c887a289cf1", read, notify)]
-    battery_voltage: u32,
+    battery_voltage: u16,
+
+    #[characteristic(uuid = "38924a07-23d7-43fe-af5d-9c887a389cf1", read, notify)]
+    battery_current: i16,
 }
 
 #[nrf_softdevice::gatt_service(uuid = "38924a07-23d7-43fe-af5d-9c887b089cf1")]
@@ -89,6 +92,10 @@ async fn poll_messages_loop<'a>(
                 BusEvent::BatteryVoltage(v) => {
                     connection.map(|c| server.power.battery_voltage_notify(c, &v));
                     server.power.battery_voltage_set(&v)
+                }
+                BusEvent::BatteryCurrent(v) => {
+                    connection.map(|c| server.power.battery_current_notify(c, &v));
+                    server.power.battery_current_set(&v)
                 }
             },
 

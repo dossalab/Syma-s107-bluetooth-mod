@@ -11,7 +11,8 @@ pub enum BusRequest {
 #[derive(Clone)]
 pub enum BusEvent {
     Soc(u8),
-    BatteryVoltage(u32),
+    BatteryVoltage(u16),
+    BatteryCurrent(i16),
     ChargerStatus(bool),
 }
 
