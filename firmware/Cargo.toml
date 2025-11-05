@@ -64,15 +64,8 @@ git = "https://github.com/dossalab/nrf-softdevice"
 features = [ "s132", "ble-gatt-client", "ble-gatt-server", "ble-central", "ble-peripheral", "ble-sec", "critical-section-impl" ]
 
 [dependencies.embassy-nrf]
-git = "https://github.com/dossalab/embassy"
-branch = "rliutko/nrf52832-inverted-pwm"
+git = "https://github.com/embassy-rs/embassy"
 features = [ "time-driver-rtc1", "gpiote", "unstable-pac" ]
 
 [dependencies.embassy-sync]
 git = "https://github.com/embassy-rs/embassy"
-
-[patch."https://github.com/embassy-rs/embassy"]
-embassy-executor = { git = "https://github.com/dossalab/embassy", branch = "rliutko/nrf52832-inverted-pwm" }
-embassy-time = { git = "https://github.com/dossalab/embassy", branch = "rliutko/nrf52832-inverted-pwm" }
-embassy-futures = { git = "https://github.com/dossalab/embassy", branch = "rliutko/nrf52832-inverted-pwm" }
-embassy-sync = { git = "https://github.com/dossalab/embassy", branch = "rliutko/nrf52832-inverted-pwm" }

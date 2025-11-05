@@ -73,9 +73,9 @@ dependencies = [
  "cortex-m-rt",
  "defmt 1.0.1",
  "defmt-rtt",
- "embassy-embedded-hal 0.5.0 (git+https://github.com/embassy-rs/embassy)",
+ "embassy-embedded-hal",
  "embassy-executor",
- "embassy-futures 0.1.2 (git+https://github.com/dossalab/embassy?branch=rliutko%2Fnrf52832-inverted-pwm)",
+ "embassy-futures 0.1.2 (git+https://github.com/embassy-rs/embassy)",
  "embassy-nrf",
  "embassy-sync 0.7.2",
  "embassy-time",
@@ -319,11 +319,11 @@ dependencies = [
 [[package]]
 name = "embassy-embedded-hal"
 version = "0.5.0"
-source = "git+https://github.com/dossalab/embassy?branch=rliutko%2Fnrf52832-inverted-pwm#7829a258b36c2d8a78c16413c7fd5ab508701e4f"
+source = "git+https://github.com/embassy-rs/embassy#c8c4c6f40bd8a2e548f3c8e06b798d448f67b884"
 dependencies = [
  "defmt 1.0.1",
- "embassy-futures 0.1.2 (git+https://github.com/dossalab/embassy?branch=rliutko%2Fnrf52832-inverted-pwm)",
- "embassy-hal-internal 0.3.0 (git+https://github.com/dossalab/embassy?branch=rliutko%2Fnrf52832-inverted-pwm)",
+ "embassy-futures 0.1.2 (git+https://github.com/embassy-rs/embassy)",
+ "embassy-hal-internal",
  "embassy-sync 0.7.2",
  "embassy-time",
  "embedded-hal 0.2.7",
@@ -335,25 +335,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "embassy-embedded-hal"
-version = "0.5.0"
-source = "git+https://github.com/embassy-rs/embassy#c8c4c6f40bd8a2e548f3c8e06b798d448f67b884"
-dependencies = [
- "embassy-futures 0.1.2 (git+https://github.com/dossalab/embassy?branch=rliutko%2Fnrf52832-inverted-pwm)",
- "embassy-hal-internal 0.3.0 (git+https://github.com/embassy-rs/embassy)",
- "embassy-sync 0.7.2",
- "embedded-hal 0.2.7",
- "embedded-hal 1.0.0",
- "embedded-hal-async",
- "embedded-storage",
- "embedded-storage-async",
- "nb 1.1.0",
-]
-
-[[package]]
 name = "embassy-executor"
 version = "0.9.1"
-source = "git+https://github.com/dossalab/embassy?branch=rliutko%2Fnrf52832-inverted-pwm#7829a258b36c2d8a78c16413c7fd5ab508701e4f"
+source = "git+https://github.com/embassy-rs/embassy#765f8dd5e5e19fb4625fb190c5efa05eb2d787e3"
 dependencies = [
  "cordyceps",
  "cortex-m",
@@ -367,7 +351,7 @@ dependencies = [
 [[package]]
 name = "embassy-executor-macros"
 version = "0.7.0"
-source = "git+https://github.com/dossalab/embassy?branch=rliutko%2Fnrf52832-inverted-pwm#7829a258b36c2d8a78c16413c7fd5ab508701e4f"
+source = "git+https://github.com/embassy-rs/embassy#765f8dd5e5e19fb4625fb190c5efa05eb2d787e3"
 dependencies = [
  "darling 0.20.11",
  "proc-macro2",
@@ -378,7 +362,7 @@ dependencies = [
 [[package]]
 name = "embassy-executor-timer-queue"
 version = "0.1.0"
-source = "git+https://github.com/dossalab/embassy?branch=rliutko%2Fnrf52832-inverted-pwm#7829a258b36c2d8a78c16413c7fd5ab508701e4f"
+source = "git+https://github.com/embassy-rs/embassy#765f8dd5e5e19fb4625fb190c5efa05eb2d787e3"
 
 [[package]]
 name = "embassy-futures"
@@ -389,12 +373,12 @@ checksum = "dc2d050bdc5c21e0862a89256ed8029ae6c290a93aecefc73084b3002cdebb01"
 [[package]]
 name = "embassy-futures"
 version = "0.1.2"
-source = "git+https://github.com/dossalab/embassy?branch=rliutko%2Fnrf52832-inverted-pwm#7829a258b36c2d8a78c16413c7fd5ab508701e4f"
+source = "git+https://github.com/embassy-rs/embassy#765f8dd5e5e19fb4625fb190c5efa05eb2d787e3"
 
 [[package]]
 name = "embassy-hal-internal"
 version = "0.3.0"
-source = "git+https://github.com/dossalab/embassy?branch=rliutko%2Fnrf52832-inverted-pwm#7829a258b36c2d8a78c16413c7fd5ab508701e4f"
+source = "git+https://github.com/embassy-rs/embassy#c8c4c6f40bd8a2e548f3c8e06b798d448f67b884"
 dependencies = [
  "cortex-m",
  "critical-section",
@@ -403,17 +387,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "embassy-hal-internal"
-version = "0.3.0"
-source = "git+https://github.com/embassy-rs/embassy#c8c4c6f40bd8a2e548f3c8e06b798d448f67b884"
-dependencies = [
- "num-traits",
-]
-
-[[package]]
 name = "embassy-nrf"
 version = "0.8.0"
-source = "git+https://github.com/dossalab/embassy?branch=rliutko%2Fnrf52832-inverted-pwm#7829a258b36c2d8a78c16413c7fd5ab508701e4f"
+source = "git+https://github.com/embassy-rs/embassy#765f8dd5e5e19fb4625fb190c5efa05eb2d787e3"
 dependencies = [
  "bitflags 2.10.0",
  "cfg-if",
@@ -422,8 +398,8 @@ dependencies = [
  "critical-section",
  "defmt 1.0.1",
  "document-features",
- "embassy-embedded-hal 0.5.0 (git+https://github.com/dossalab/embassy?branch=rliutko%2Fnrf52832-inverted-pwm)",
- "embassy-hal-internal 0.3.0 (git+https://github.com/dossalab/embassy?branch=rliutko%2Fnrf52832-inverted-pwm)",
+ "embassy-embedded-hal",
+ "embassy-hal-internal",
  "embassy-sync 0.7.2",
  "embassy-time-driver",
  "embassy-time-queue-utils",
@@ -458,7 +434,7 @@ dependencies = [
 [[package]]
 name = "embassy-sync"
 version = "0.7.2"
-source = "git+https://github.com/dossalab/embassy?branch=rliutko%2Fnrf52832-inverted-pwm#7829a258b36c2d8a78c16413c7fd5ab508701e4f"
+source = "git+https://github.com/embassy-rs/embassy#765f8dd5e5e19fb4625fb190c5efa05eb2d787e3"
 dependencies = [
  "cfg-if",
  "critical-section",
@@ -472,7 +448,7 @@ dependencies = [
 [[package]]
 name = "embassy-time"
 version = "0.5.0"
-source = "git+https://github.com/dossalab/embassy?branch=rliutko%2Fnrf52832-inverted-pwm#7829a258b36c2d8a78c16413c7fd5ab508701e4f"
+source = "git+https://github.com/embassy-rs/embassy#765f8dd5e5e19fb4625fb190c5efa05eb2d787e3"
 dependencies = [
  "cfg-if",
  "critical-section",
@@ -488,7 +464,7 @@ dependencies = [
 [[package]]
 name = "embassy-time-driver"
 version = "0.2.1"
-source = "git+https://github.com/dossalab/embassy?branch=rliutko%2Fnrf52832-inverted-pwm#7829a258b36c2d8a78c16413c7fd5ab508701e4f"
+source = "git+https://github.com/embassy-rs/embassy#765f8dd5e5e19fb4625fb190c5efa05eb2d787e3"
 dependencies = [
  "document-features",
 ]
@@ -496,7 +472,7 @@ dependencies = [
 [[package]]
 name = "embassy-time-queue-utils"
 version = "0.3.0"
-source = "git+https://github.com/dossalab/embassy?branch=rliutko%2Fnrf52832-inverted-pwm#7829a258b36c2d8a78c16413c7fd5ab508701e4f"
+source = "git+https://github.com/embassy-rs/embassy#765f8dd5e5e19fb4625fb190c5efa05eb2d787e3"
 dependencies = [
  "embassy-executor-timer-queue",
  "heapless",
@@ -505,7 +481,7 @@ dependencies = [
 [[package]]
 name = "embassy-usb-driver"
 version = "0.2.0"
-source = "git+https://github.com/dossalab/embassy?branch=rliutko%2Fnrf52832-inverted-pwm#7829a258b36c2d8a78c16413c7fd5ab508701e4f"
+source = "git+https://github.com/embassy-rs/embassy#765f8dd5e5e19fb4625fb190c5efa05eb2d787e3"
 dependencies = [
  "defmt 1.0.1",
  "embedded-io-async",
@@ -805,8 +781,7 @@ checksum = "8d5439c4ad607c3c23abf66de8c8bf57ba8adcd1f129e699851a6e43935d339d"
 [[package]]
 name = "nrf-pac"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d334027d6703534f2a80de0794ae435c0e029358d28278533d3935e69b221b01"
+source = "git+https://github.com/embassy-rs/nrf-pac.git?rev=58198c23bce72edc10b4e1656d1b54441fc74e7c#58198c23bce72edc10b4e1656d1b54441fc74e7c"
 dependencies = [
  "cortex-m",
  "cortex-m-rt",

@@ -1,15 +1,11 @@
 use embassy_futures::select::{select, Either};
 use embassy_nrf::{
     gpio::{self, Level, Output, OutputDrive},
-    pwm::{self, SimplePwm},
+    pwm::{self, DutyCycle, SimplePwm},
 };
 use embassy_time::{Duration, Timer};
 
 use crate::{ble::events::BluetoothEventsProxy, xbox::JoystickData, MotorResources};
-
-const CHANNEL_ID_ROTOR1: usize = 0;
-const CHANNEL_ID_ROTOR2: usize = 1;
-const CHANNEL_ID_TAIL: usize = 2;
 
 struct Controller<'a> {
     pwm: SimplePwm<'a>,
@@ -23,7 +19,7 @@ impl<'a> Controller<'a> {
     fn set_pwm(&mut self, r1: i32, r2: i32, v: i32) {
         let clamp_to_pwm = |x: i32| x.clamp(0, Self::PWM_MAX_DUTY as i32) as u16;
 
-        let value = if v > 0 {
+        let tail = if v > 0 {
             self.tail_n.set_high();
 
             Self::PWM_MAX_DUTY as i32 - v
@@ -32,9 +28,14 @@ impl<'a> Controller<'a> {
             -v
         };
 
-        self.pwm.set_duty(CHANNEL_ID_ROTOR1, clamp_to_pwm(r1));
-        self.pwm.set_duty(CHANNEL_ID_ROTOR2, clamp_to_pwm(r2));
-        self.pwm.set_duty(CHANNEL_ID_TAIL, clamp_to_pwm(value));
+        let duties = [
+            DutyCycle::inverted(clamp_to_pwm(r1)),
+            DutyCycle::inverted(clamp_to_pwm(r2)),
+            DutyCycle::inverted(clamp_to_pwm(tail)),
+            DutyCycle::inverted(0), // unused
+        ];
+
+        self.pwm.set_all_duties(duties);
     }
 
     fn update(&mut self, position: &JoystickData) {
@@ -53,8 +54,6 @@ impl<'a> Controller<'a> {
     }
 
     fn new(pwm: SimplePwm<'a>, tail_n: Output<'a>) -> Self {
-        pwm.set_prescaler(pwm::Prescaler::Div1);
-        pwm.set_max_duty(Self::PWM_MAX_DUTY);
         Self { pwm, tail_n }
     }
 }
@@ -65,12 +64,18 @@ pub async fn run(proxy: &'static BluetoothEventsProxy, mut r: MotorResources) {
 
     loop {
         let run_controller = async {
+            let mut config = pwm::SimpleConfig::default();
+
+            config.max_duty = Controller::PWM_MAX_DUTY;
+            config.prescaler = pwm::Prescaler::Div1;
+
             let pwm = SimplePwm::new_3ch(
                 r.pwm.reborrow(),
                 // Recheck channel id assignments above if changing order
                 r.rotor1.reborrow(),
                 r.rotor2.reborrow(),
                 r.tail_p.reborrow(),
+                &config,
             );
 
             let tail_n = Output::new(r.tail_n.reborrow(), Level::Low, OutputDrive::Standard);
