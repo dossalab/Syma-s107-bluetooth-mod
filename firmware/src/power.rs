@@ -300,8 +300,8 @@ pub async fn run(
     let mut charger = Charger::new(charger_fault, charger_charging);
     let mut fuelgauge = Fuelgauge::new(fuelgauge_int, dev);
 
-    if fuelgauge.probe().await.is_err() {
-        error!("fuelgauge initialization failure");
+    if let Err(e) = fuelgauge.probe().await {
+        error!("fuelgauge initialization failure - {}", e);
     }
 
     loop {
