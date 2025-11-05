@@ -1,7 +1,7 @@
 use embassy_futures::select::{select, Either};
 use embassy_nrf::{
     gpio::{self, Level, Output, OutputDrive},
-    pwm::SimplePwm,
+    pwm::{self, SimplePwm},
 };
 use embassy_time::{Duration, Timer};
 
@@ -18,7 +18,7 @@ struct Controller<'a> {
 
 impl<'a> Controller<'a> {
     const RUDDER_SCALE: i32 = 4;
-    const PWM_MAX_DUTY: u16 = 1024;
+    const PWM_MAX_DUTY: u16 = 512;
 
     fn set_pwm(&mut self, r1: i32, r2: i32, v: i32) {
         let clamp_to_pwm = |x: i32| x.clamp(0, Self::PWM_MAX_DUTY as i32) as u16;
@@ -38,12 +38,12 @@ impl<'a> Controller<'a> {
     }
 
     fn update(&mut self, position: &JoystickData) {
-        let throttle = (position.j1.1 >> 5).max(0);
-        let yaw = position.j2.0 >> 5;
+        let throttle = (position.j1.1 >> 6).max(0);
+        let yaw = position.j2.0 >> 6;
 
         let rotor1 = throttle - (yaw / Self::RUDDER_SCALE);
         let rotor2 = throttle + (yaw / Self::RUDDER_SCALE);
-        let elevator = position.j2.1 >> 5;
+        let elevator = position.j2.1 >> 6;
 
         self.set_pwm(rotor1, rotor2, elevator);
     }
@@ -53,6 +53,7 @@ impl<'a> Controller<'a> {
     }
 
     fn new(pwm: SimplePwm<'a>, tail_n: Output<'a>) -> Self {
+        pwm.set_prescaler(pwm::Prescaler::Div1);
         pwm.set_max_duty(Self::PWM_MAX_DUTY);
         Self { pwm, tail_n }
     }
