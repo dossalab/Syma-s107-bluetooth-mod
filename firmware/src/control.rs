@@ -67,7 +67,7 @@ pub async fn run(proxy: &'static BluetoothEventsProxy, mut r: MotorResources) {
             let mut config = pwm::SimpleConfig::default();
 
             config.max_duty = Controller::PWM_MAX_DUTY;
-            config.prescaler = pwm::Prescaler::Div1;
+            config.prescaler = pwm::Prescaler::Div16;
 
             let pwm = SimplePwm::new_3ch(
                 r.pwm.reborrow(),
