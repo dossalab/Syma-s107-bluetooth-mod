@@ -28,7 +28,7 @@ pub struct PowerService {
     #[characteristic(uuid = "38924a07-23d7-43fe-af5d-9c887a289cf1", read, notify)]
     charger_failure: bool,
 
-    #[characteristic(uuid = "38924a07-23d7-43fe-af5d-9c887a389cf1", read, notify)]
+    #[characteristic(uuid = "38924a07-23d7-43fe-af5d-9c887a389cf1", notify)]
     periodic_update: PeriodicUpdate,
 }
 
@@ -75,7 +75,6 @@ async fn run_notifications(
     server
         .power
         .charger_failure_set(&ps.is_charging_failure())?;
-    server.power.periodic_update_set(&ps.periodic_snapshot())?;
 
     // And then wait for the updates
     let mut receiver = unwrap!(ps.event_receiver());

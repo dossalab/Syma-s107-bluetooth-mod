@@ -1,4 +1,4 @@
-use core::sync::atomic::{AtomicBool, AtomicI16, AtomicU16, AtomicU8, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 
 use embassy_sync::{
     blocking_mutex::raw::CriticalSectionRawMutex,
@@ -29,9 +29,6 @@ pub struct PowerStats {
     charging: AtomicBool,
     charger_failure: AtomicBool,
     soc: AtomicU8,
-    voltage: AtomicU16,
-    current: AtomicI16,
-    temperature: AtomicU16,
 
     watch: StatsWatch,
 }
@@ -61,14 +58,6 @@ impl<'a> PowerStats {
         self.soc() <= 15
     }
 
-    pub fn periodic_snapshot(&self) -> PeriodicUpdate {
-        PeriodicUpdate {
-            voltage: self.voltage.load(Ordering::Relaxed),
-            current: self.current.load(Ordering::Relaxed),
-            temperature: self.temperature.load(Ordering::Relaxed),
-        }
-    }
-
     fn notify(&self, t: UpdateType) {
         self.watch.sender().send(t);
     }
@@ -79,16 +68,6 @@ impl<'a> PowerStats {
     }
 
     pub fn add_periodic_update(&self, u: PeriodicUpdate) {
-        let PeriodicUpdate {
-            voltage,
-            current,
-            temperature,
-        } = u;
-
-        self.voltage.store(voltage, Ordering::Relaxed);
-        self.current.store(current, Ordering::Relaxed);
-        self.temperature.store(temperature, Ordering::Relaxed);
-
         self.notify(UpdateType::PeriodicUpdate(u));
     }
 
@@ -104,12 +83,9 @@ impl<'a> PowerStats {
 
     pub fn new() -> Self {
         Self {
-            voltage: Default::default(),
-            current: Default::default(),
             charger_failure: Default::default(),
             charging: Default::default(),
             soc: Default::default(),
-            temperature: Default::default(),
 
             watch: Watch::new(),
         }
