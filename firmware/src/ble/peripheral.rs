@@ -2,7 +2,7 @@ use defmt::{debug, error, info, unwrap, warn};
 use embassy_futures::select::{select, Either};
 use embassy_time::Timer;
 use nrf_softdevice::ble::advertisement_builder::{
-    Flag, LegacyAdvertisementBuilder, LegacyAdvertisementPayload, ServiceList, ServiceUuid16,
+    Flag, LegacyAdvertisementBuilder, LegacyAdvertisementPayload, ServiceList,
 };
 use nrf_softdevice::ble::{gatt_server, peripheral, Connection, Primitive};
 use nrf_softdevice::Softdevice;
@@ -18,6 +18,10 @@ pub struct BatteryService {
 }
 
 unsafe impl Primitive for PeriodicUpdate {}
+
+// Help clients find us by using that uuid
+const POWER_SERVICE_UUID_BYTES: [u8; 16] =
+    0x38924a07_23d7_43fe_af5d_9c887a089cf1_u128.to_le_bytes();
 
 // bas is too limited to share everything we have
 #[nrf_softdevice::gatt_service(uuid = "38924a07-23d7-43fe-af5d-9c887a089cf1")]
@@ -100,12 +104,11 @@ async fn run_notifications(
 pub async fn peripheral_loop(sd: &Softdevice, ps: &'static PowerStats, server: GattServer) {
     static ADV_DATA: LegacyAdvertisementPayload = LegacyAdvertisementBuilder::new()
         .flags(&[Flag::GeneralDiscovery, Flag::LE_Only])
-        .services_16(ServiceList::Complete, &[ServiceUuid16::HEALTH_THERMOMETER])
-        .short_name("Hello")
+        .services_128(ServiceList::Incomplete, &[POWER_SERVICE_UUID_BYTES])
         .build();
 
     static SCAN_DATA: LegacyAdvertisementPayload = LegacyAdvertisementBuilder::new()
-        .full_name("Hello, Rust!")
+        .full_name("Syma S107")
         .build();
 
     let config = peripheral::Config {
