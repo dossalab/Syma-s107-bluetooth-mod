@@ -2,8 +2,9 @@ use core::future;
 
 use crate::{power::stats::PeriodicUpdate, PowerResources, SharedI2cBus};
 use bq27xxx::{
-    chips::bq27427::{CurrentThresholds, RaTable, StateClass},
-    defs::StatusFlags,
+    chips::bq27427::{ChemInfo, CurrentThresholds, RaTable, StateClass},
+    defs::{ControlStatusFlags, StatusFlags},
+    memory::{self, MemoryBlock},
     Bq27xx, ChemId,
 };
 use defmt::{error, info};
@@ -21,6 +22,21 @@ pub mod stats;
 
 type Gauge<'a> = Bq27xx<I2cDevice<'a, NoopRawMutex, twim::Twim<'a>>, embassy_time::Delay>;
 type GaugeResult<T> = Result<T, bq27xxx::ChipError<I2cDeviceError<twim::Error>>>;
+
+async fn wait_gauge_init_complete<'a>(gauge: &mut Gauge<'a>) -> GaugeResult<()> {
+    for _ in 0..10 {
+        let control_flags = gauge.get_control_status().await?;
+
+        if control_flags.contains(ControlStatusFlags::INITCOMP) {
+            info!("fuelgauge init complete!");
+            return Ok(());
+        }
+
+        Timer::after_secs(1).await;
+    }
+
+    Err(bq27xxx::ChipError::PollTimeout)
+}
 
 async fn configure_gauge<'a>(gauge: &mut Gauge<'a>) -> GaugeResult<()> {
     gauge.write_chem_id(ChemId::B4200).await?;
@@ -61,6 +77,12 @@ async fn configure_gauge<'a>(gauge: &mut Gauge<'a>) -> GaugeResult<()> {
             // This is obtained from learning cycle :)
             b.set_points([50, 30, 34, 46, 38, 32, 37, 31, 32, 35, 39, 39, 61, 115, 200]);
         })
+        .await?;
+
+    gauge
+        .memory_modify(|b: &mut ChemInfo| {
+            b.set_v_taper(4200); // mV
+        })
         .await
 }
 
@@ -86,11 +108,19 @@ pub async fn run(stats: &'static PowerStats, mut r: PowerResources, i2c: &'stati
 
         if flags.contains(StatusFlags::ITPOR) || force_memory_update {
             info!("fuelgauge ITPOR condition");
-            configure_gauge(&mut gauge).await?;
-        }
 
-        info!("state: {}", gauge.memblock_read::<StateClass>().await?);
-        info!("ratable: {}", gauge.memblock_read::<RaTable>().await?);
+            wait_gauge_init_complete(&mut gauge).await?;
+            configure_gauge(&mut gauge).await?;
+        } else {
+            // still dump the info for debugging
+            info!("state: {}", gauge.memblock_read::<StateClass>().await?);
+            info!(
+                "ratable: {}",
+                gauge.memblock_read::<RaTable>().await?.as_bytes()
+            );
+
+            info!("chem: {}", gauge.memblock_read::<ChemInfo>().await?);
+        }
 
         let next_periodic_update = async || match do_periodic {
             true => Timer::after(GAUGE_PERIODIC_POLL_INTERVAL).await,
