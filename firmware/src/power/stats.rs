@@ -20,6 +20,7 @@ pub enum UpdateType {
     ChargingStatus(bool),
     ChargingFailure(bool),
     PeriodicUpdate(PeriodicUpdate),
+    GyroSample(i16),
 }
 
 type StatsWatch = Watch<CriticalSectionRawMutex, UpdateType, 2>;
@@ -69,6 +70,10 @@ impl<'a> PowerStats {
 
     pub fn add_periodic_update(&self, u: PeriodicUpdate) {
         self.notify(UpdateType::PeriodicUpdate(u));
+    }
+
+    pub fn add_gyro_sample(&self, s: i16) {
+        self.notify(UpdateType::GyroSample(s));
     }
 
     pub fn set_charging(&self, charging: bool) {

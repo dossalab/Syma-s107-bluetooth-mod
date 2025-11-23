@@ -34,6 +34,9 @@ pub struct PowerService {
 
     #[characteristic(uuid = "38924a07-23d7-43fe-af5d-9c887a389cf1", notify)]
     periodic_update: PeriodicUpdate,
+
+    #[characteristic(uuid = "38924a07-23d7-43fe-af5d-9c887a489cf1", notify)]
+    gyro: i16,
 }
 
 #[nrf_softdevice::gatt_service(uuid = "38924a07-23d7-43fe-af5d-9c887b089cf1")]
@@ -89,6 +92,7 @@ async fn run_notifications(
                 UpdateType::ChargingStatus(v) => server.power.charger_connected_notify(conn, &v)?,
                 UpdateType::ChargingFailure(v) => server.power.charger_failure_notify(conn, &v)?,
                 UpdateType::PeriodicUpdate(v) => server.power.periodic_update_notify(conn, &v)?,
+                UpdateType::GyroSample(v) => server.power.gyro_notify(conn, &v)?,
             }
 
             Ok(())

@@ -11,7 +11,7 @@ use embassy_executor::Spawner;
 use embassy_nrf::{
     bind_interrupts,
     interrupt::{self, InterruptExt},
-    peripherals,
+    peripherals, saadc,
     twim::{self, Twim},
     Peri,
 };
@@ -35,6 +35,7 @@ type SharedI2cBus = Mutex<NoopRawMutex, Twim<'static>>;
 
 bind_interrupts!(struct Irqs {
     TWISPI0 => twim::InterruptHandler<peripherals::TWISPI0>;
+    SAADC => saadc::InterruptHandler;
 });
 
 assign_resources! {
@@ -64,7 +65,10 @@ assign_resources! {
     gyro: GyroResources {
         power: P0_26,
         input: P0_28,
-        vref: P0_29
+        vref: P0_29,
+        // in current implementation, there's no need to share it, so just
+        // keep it here for simplicity
+        adc: SAADC
     }
 }
 
@@ -86,6 +90,7 @@ fn hw_init() -> (AssignedResources, &'static mut Softdevice) {
     config.time_interrupt_priority = interrupt::Priority::P2;
 
     interrupt::TWISPI0.set_priority(interrupt::Priority::P2);
+    interrupt::SAADC.set_priority(interrupt::Priority::P2);
 
     let sd_config = nrf_softdevice::Config {
         conn_gap: Some(raw::ble_gap_conn_cfg_t {
@@ -139,6 +144,11 @@ async fn main(spawner: Spawner) {
         &LED_INDICATIONS,
         &BLE_EVENTS
     )));
-    spawner.spawn(unwrap!(control::run(&BLE_EVENTS, r.motor)));
+    spawner.spawn(unwrap!(control::run(
+        &BLE_EVENTS,
+        power_stats,
+        r.motor,
+        r.gyro
+    )));
     spawner.spawn(unwrap!(power::run(power_stats, r.power, i2c)));
 }
