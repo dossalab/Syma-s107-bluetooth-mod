@@ -39,13 +39,6 @@ bind_interrupts!(struct Irqs {
 });
 
 assign_resources! {
-    motor: MotorResources {
-        pwm: PWM0,
-        rotor1: P0_01,
-        rotor2: P0_02,
-        tail_p: P0_03,
-        tail_n: P0_04,
-    },
     led_switch: LedSwitchResources {
         led: P0_00,
         switch: P0_05,
@@ -62,14 +55,20 @@ assign_resources! {
         charging_int: P0_11,
         fault_int: P0_12
     },
-    gyro: GyroResources {
-        power: P0_26,
-        input: P0_28,
-        vref: P0_29,
-        // in current implementation, there's no need to share it, so just
-        // keep it here for simplicity
-        adc: SAADC
-    }
+    controller: ControllerResources {
+        // in current implementation, there's no need to share them, so just
+        // keep them here for simplicity
+        adc: SAADC,
+        pwm: PWM0,
+
+        rotor1: P0_01,
+        rotor2: P0_02,
+        tail_p: P0_03,
+        tail_n: P0_04,
+        gyro_power: P0_26,
+        gyro_input: P0_28,
+        gyro_vref: P0_29,
+    },
 }
 
 // It's safer to reboot rather than hang
@@ -147,8 +146,7 @@ async fn main(spawner: Spawner) {
     spawner.spawn(unwrap!(control::run(
         &BLE_EVENTS,
         power_stats,
-        r.motor,
-        r.gyro
+        r.controller,
     )));
     spawner.spawn(unwrap!(power::run(power_stats, r.power, i2c)));
 }

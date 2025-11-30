@@ -7,6 +7,7 @@ use nrf_softdevice::gatt_client;
 pub const STICKS_RANGE: i32 = 65535;
 
 bitflags! {
+    #[derive(Default)]
     pub struct ButtonFlags:u32 {
         const BUTTON_A = 1 << 0;
         const BUTTON_B = 1 << 1;
@@ -23,7 +24,7 @@ bitflags! {
     }
 }
 
-#[derive(defmt::Format)]
+#[derive(defmt::Format, Default)]
 pub struct JoystickData {
     pub j1: (i32, i32),
     pub j2: (i32, i32),

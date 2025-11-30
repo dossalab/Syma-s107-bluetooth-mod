@@ -17,7 +17,17 @@ pub struct BatteryService {
     battery_level: u8,
 }
 
+#[repr(C, packed)]
+#[derive(Default, Copy, Clone)]
+pub struct PidUpdate {
+    // let's use 0.0 fixed point format to not waste space
+    pub p: u16,
+    pub i: u16,
+    pub d: u16,
+}
+
 unsafe impl Primitive for PeriodicUpdate {}
+unsafe impl Primitive for PidUpdate {}
 
 // Help clients find us by using that uuid
 const POWER_SERVICE_UUID_BYTES: [u8; 16] =
@@ -43,6 +53,9 @@ pub struct PowerService {
 pub struct ControlService {
     #[characteristic(uuid = "38924a07-23d7-43fe-af5d-9c887b189cf1", write)]
     reboot_request: bool,
+
+    #[characteristic(uuid = "38924a07-23d7-43fe-af5d-9c887b289cf1", write)]
+    pid_update_request: PidUpdate,
 }
 
 #[nrf_softdevice::gatt_server]
@@ -52,7 +65,7 @@ pub struct GattServer {
     control: ControlService,
 }
 
-async fn run_gatt(server: &GattServer, conn: &Connection) {
+async fn run_gatt(server: &GattServer, conn: &Connection, ps: &PowerStats) {
     let handle_bas = |e| match e {
         BatteryServiceEvent::BatteryLevelCccdWrite { notifications } => {
             info!("battery notifications: {}", notifications)
@@ -61,6 +74,9 @@ async fn run_gatt(server: &GattServer, conn: &Connection) {
 
     let handle_control = |e| match e {
         ControlServiceEvent::RebootRequestWrite(_) => {}
+        ControlServiceEvent::PidUpdateRequestWrite(PidUpdate { p, i, d }) => {
+            ps.update_controller_pid(p as f32 / 10.0, i as f32 / 10.0, d as f32 / 10.0)
+        }
     };
 
     gatt_server::run(conn, server, |e| match e {
@@ -93,6 +109,8 @@ async fn run_notifications(
                 UpdateType::ChargingFailure(v) => server.power.charger_failure_notify(conn, &v)?,
                 UpdateType::PeriodicUpdate(v) => server.power.periodic_update_notify(conn, &v)?,
                 UpdateType::GyroSample(v) => server.power.gyro_notify(conn, &v)?,
+
+                _ => {}
             }
 
             Ok(())
@@ -129,7 +147,7 @@ pub async fn peripheral_loop(sd: &Softdevice, ps: &'static PowerStats, server: G
         match peripheral::advertise_connectable(sd, adv, &config).await {
             Ok(conn) => {
                 let r = select(
-                    run_gatt(&server, &conn),
+                    run_gatt(&server, &conn, ps),
                     run_notifications(ps, &conn, &server),
                 )
                 .await;

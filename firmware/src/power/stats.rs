@@ -21,6 +21,7 @@ pub enum UpdateType {
     ChargingFailure(bool),
     PeriodicUpdate(PeriodicUpdate),
     GyroSample(i16),
+    PidUpdate(f32, f32, f32),
 }
 
 type StatsWatch = Watch<CriticalSectionRawMutex, UpdateType, 2>;
@@ -84,6 +85,10 @@ impl<'a> PowerStats {
     pub fn set_charger_failure(&self, failure: bool) {
         self.charger_failure.store(failure, Ordering::Relaxed);
         self.notify(UpdateType::ChargingFailure(failure));
+    }
+
+    pub fn update_controller_pid(&self, p: f32, i: f32, d: f32) {
+        self.notify(UpdateType::PidUpdate(p, i, d));
     }
 
     pub fn new() -> Self {

@@ -19,8 +19,12 @@ impl BluetoothEventsProxy {
         self.disconnect.wait().await
     }
 
-    pub async fn wait_joystick_data(&self) -> JoystickData {
-        self.data.wait().await
+    pub fn joystick_data_take(&self) -> Option<JoystickData> {
+        self.data.try_take()
+    }
+
+    pub fn joystick_data_available(&self) -> bool {
+        self.data.signaled()
     }
 
     pub async fn notify_connection<F, R, Fut>(&self, f: F) -> R
