@@ -1,10 +1,11 @@
 use core::future;
 
-use crate::{power::stats::PeriodicUpdate, PowerResources, SharedI2cBus};
+use crate::state::{PeriodicUpdate, SystemState};
+use crate::{PowerResources, SharedI2cBus};
 use bq27xxx::{
     chips::bq27427::{ChemInfo, CurrentThresholds, RaTable, StateClass},
     defs::{ControlStatusFlags, StatusFlags},
-    memory::{self, MemoryBlock},
+    memory::MemoryBlock,
     Bq27xx, ChemId,
 };
 use defmt::{error, info};
@@ -16,9 +17,6 @@ use embassy_nrf::{
 };
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embassy_time::{Duration, Timer};
-use stats::PowerStats;
-
-pub mod stats;
 
 type Gauge<'a> = Bq27xx<I2cDevice<'a, NoopRawMutex, twim::Twim<'a>>, embassy_time::Delay>;
 type GaugeResult<T> = Result<T, bq27xxx::ChipError<I2cDeviceError<twim::Error>>>;
@@ -87,7 +85,7 @@ async fn configure_gauge<'a>(gauge: &mut Gauge<'a>) -> GaugeResult<()> {
 }
 
 #[embassy_executor::task]
-pub async fn run(stats: &'static PowerStats, mut r: PowerResources, i2c: &'static SharedI2cBus) {
+pub async fn run(stats: &'static SystemState, mut r: PowerResources, i2c: &'static SharedI2cBus) {
     const GAUGE_I2C_ADDR: u8 = 0x55;
     const GAUGE_INIT_RETRY_INTERVAL: Duration = Duration::from_secs(10);
     const GAUGE_PERIODIC_POLL_INTERVAL: Duration = Duration::from_secs(1);

@@ -10,7 +10,7 @@ use pid::Pid;
 
 use crate::{
     ble::events::BluetoothEventsProxy,
-    power::stats::{PowerStats, UpdateType},
+    state::{SystemState, UpdateType},
     xbox::JoystickData,
     ControllerResources, Irqs,
 };
@@ -21,7 +21,7 @@ struct Controller<'a> {
     gyro_power: gpio::Output<'a>,
     tail_n: gpio::Output<'a>,
     pid: Pid<f32>,
-    ps: &'a PowerStats,
+    ps: &'a SystemState,
 }
 
 impl<'a> Controller<'a> {
@@ -124,7 +124,7 @@ impl<'a> Controller<'a> {
         }
     }
 
-    fn new(r: &'a mut ControllerResources, ps: &'a PowerStats) -> Self {
+    fn new(r: &'a mut ControllerResources, ps: &'a SystemState) -> Self {
         let mut pwm_config = pwm::SimpleConfig::default();
 
         pwm_config.max_duty = Controller::PWM_MAX_DUTY;
@@ -178,7 +178,7 @@ impl<'a> Controller<'a> {
 #[embassy_executor::task]
 pub async fn run(
     proxy: &'static BluetoothEventsProxy,
-    ps: &'static PowerStats,
+    ps: &'static SystemState,
     mut r: ControllerResources,
 ) {
     loop {

@@ -7,7 +7,7 @@ use nrf_softdevice::ble::advertisement_builder::{
 use nrf_softdevice::ble::{gatt_server, peripheral, Connection, Primitive};
 use nrf_softdevice::Softdevice;
 
-use crate::power::stats::{PeriodicUpdate, PowerStats, UpdateType};
+use crate::state::{PeriodicUpdate, SystemState, UpdateType};
 
 use super::errors::BleError;
 
@@ -65,7 +65,7 @@ pub struct GattServer {
     control: ControlService,
 }
 
-async fn run_gatt(server: &GattServer, conn: &Connection, ps: &PowerStats) {
+async fn run_gatt(server: &GattServer, conn: &Connection, ps: &SystemState) {
     let handle_bas = |e| match e {
         BatteryServiceEvent::BatteryLevelCccdWrite { notifications } => {
             info!("battery notifications: {}", notifications)
@@ -88,7 +88,7 @@ async fn run_gatt(server: &GattServer, conn: &Connection, ps: &PowerStats) {
 }
 
 async fn run_notifications(
-    ps: &PowerStats,
+    ps: &SystemState,
     conn: &Connection,
     server: &GattServer,
 ) -> Result<(), BleError> {
@@ -123,7 +123,7 @@ async fn run_notifications(
     }
 }
 
-pub async fn peripheral_loop(sd: &Softdevice, ps: &'static PowerStats, server: GattServer) {
+pub async fn peripheral_loop(sd: &Softdevice, ps: &'static SystemState, server: GattServer) {
     static ADV_DATA: LegacyAdvertisementPayload = LegacyAdvertisementBuilder::new()
         .flags(&[Flag::GeneralDiscovery, Flag::LE_Only])
         .services_128(ServiceList::Incomplete, &[POWER_SERVICE_UUID_BYTES])

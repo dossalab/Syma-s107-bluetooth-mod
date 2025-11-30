@@ -3,7 +3,7 @@
 
 use assign_resources::assign_resources;
 use ble::events::BluetoothEventsProxy;
-use power::stats::PowerStats;
+use state::SystemState;
 use static_cell::StaticCell;
 
 use core::panic::PanicInfo;
@@ -27,6 +27,7 @@ mod control;
 mod executor;
 mod indications;
 mod power;
+mod state;
 mod xbox;
 
 use defmt_rtt as _;
@@ -130,8 +131,8 @@ async fn main(spawner: Spawner) {
 
     info!("ble-copter ({}) is running. Hello!", git_version!());
 
-    static POWER_STATS: StaticCell<PowerStats> = StaticCell::new();
-    let power_stats = POWER_STATS.init(PowerStats::new());
+    static POWER_STATS: StaticCell<SystemState> = StaticCell::new();
+    let power_stats = POWER_STATS.init(SystemState::new());
 
     static LED_INDICATIONS: LedIndicationsSignal = Signal::new();
     static BLE_EVENTS: BluetoothEventsProxy = BluetoothEventsProxy::new();

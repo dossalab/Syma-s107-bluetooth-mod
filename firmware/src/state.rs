@@ -27,7 +27,7 @@ pub enum UpdateType {
 type StatsWatch = Watch<CriticalSectionRawMutex, UpdateType, 2>;
 type StatsReceiver<'a> = Receiver<'a, CriticalSectionRawMutex, UpdateType, 2>;
 
-pub struct PowerStats {
+pub struct SystemState {
     charging: AtomicBool,
     charger_failure: AtomicBool,
     soc: AtomicU8,
@@ -35,7 +35,7 @@ pub struct PowerStats {
     watch: StatsWatch,
 }
 
-impl<'a> PowerStats {
+impl<'a> SystemState {
     pub fn event_receiver(&'a self) -> Option<StatsReceiver<'a>> {
         self.watch.receiver()
     }

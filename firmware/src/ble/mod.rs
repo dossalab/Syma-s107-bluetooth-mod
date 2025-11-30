@@ -6,7 +6,7 @@ use nrf_softdevice::Softdevice;
 use peripheral::{peripheral_loop, GattServer};
 use static_cell::StaticCell;
 
-use crate::{indications::LedIndicationsSignal, power::stats::PowerStats};
+use crate::{indications::LedIndicationsSignal, state::SystemState};
 
 mod central;
 mod errors;
@@ -17,7 +17,7 @@ pub mod events;
 #[embassy_executor::task]
 pub async fn run(
     sd: &'static mut Softdevice,
-    ps: &'static PowerStats,
+    ps: &'static SystemState,
     indications: &'static LedIndicationsSignal,
     events: &'static BluetoothEventsProxy,
 ) {
