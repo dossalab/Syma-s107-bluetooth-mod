@@ -26,8 +26,11 @@ pub async fn run(
     let server = unwrap!(GattServer::new(sd));
 
     join3(
-        central_loop(sd, indications, events, bonder),
-        peripheral_loop(sd, ps, server),
+        ps.run_while(
+            || !ps.is_soc_fatal(),
+            || central_loop(sd, indications, events, bonder),
+        ),
+        ps.run_while(|| !ps.is_soc_fatal(), || peripheral_loop(sd, ps, &server)),
         sd.run(),
     )
     .await;

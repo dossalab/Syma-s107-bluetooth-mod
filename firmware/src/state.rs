@@ -1,5 +1,10 @@
-use core::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use core::{
+    future::Future,
+    sync::atomic::{AtomicBool, AtomicU8, Ordering},
+};
 
+use defmt::unwrap;
+use embassy_futures::select::select;
 use embassy_sync::{
     blocking_mutex::raw::CriticalSectionRawMutex,
     watch::{Receiver, Watch},
@@ -24,8 +29,8 @@ pub enum UpdateType {
     PidUpdate(f32, f32, f32),
 }
 
-type StatsWatch = Watch<CriticalSectionRawMutex, UpdateType, 2>;
-type StatsReceiver<'a> = Receiver<'a, CriticalSectionRawMutex, UpdateType, 2>;
+type StatsWatch = Watch<CriticalSectionRawMutex, UpdateType, 4>;
+type StatsReceiver<'a> = Receiver<'a, CriticalSectionRawMutex, UpdateType, 4>;
 
 pub struct SystemState {
     charging: AtomicBool,
@@ -89,6 +94,31 @@ impl<'a> SystemState {
 
     pub fn update_controller_pid(&self, p: f32, i: f32, d: f32) {
         self.notify(UpdateType::PidUpdate(p, i, d));
+    }
+
+    pub async fn run_while<C, F, Fut>(&self, cond: C, mut fun: F)
+    where
+        C: Fn() -> bool,
+        F: FnMut() -> Fut,
+        Fut: Future<Output = ()>,
+    {
+        let mut receiver = unwrap!(self.event_receiver());
+
+        loop {
+            let mut wait_cancellation = async || loop {
+                _ = receiver.changed().await;
+                if !cond() {
+                    break;
+                }
+            };
+
+            if cond() {
+                select(fun(), wait_cancellation()).await;
+                continue;
+            }
+
+            _ = receiver.changed().await;
+        }
     }
 
     pub fn new() -> Self {

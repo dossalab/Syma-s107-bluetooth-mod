@@ -123,7 +123,7 @@ async fn run_notifications(
     }
 }
 
-pub async fn peripheral_loop(sd: &Softdevice, ps: &'static SystemState, server: GattServer) {
+pub async fn peripheral_loop(sd: &Softdevice, ps: &'static SystemState, server: &GattServer) {
     static ADV_DATA: LegacyAdvertisementPayload = LegacyAdvertisementBuilder::new()
         .flags(&[Flag::GeneralDiscovery, Flag::LE_Only])
         .services_128(ServiceList::Incomplete, &[POWER_SERVICE_UUID_BYTES])
