@@ -1,7 +1,6 @@
 use central::{central_loop, Bonder};
 use defmt::unwrap;
 use embassy_futures::join::join3;
-use events::BluetoothEventsProxy;
 use nrf_softdevice::Softdevice;
 use peripheral::{peripheral_loop, GattServer};
 use static_cell::StaticCell;
@@ -12,25 +11,21 @@ mod central;
 mod errors;
 mod peripheral;
 
-pub mod events;
-
 #[embassy_executor::task]
 pub async fn run(
     sd: &'static mut Softdevice,
     ps: &'static SystemState,
     indications: &'static LedIndicationsSignal,
-    events: &'static BluetoothEventsProxy,
 ) {
     static BONDER: StaticCell<Bonder> = StaticCell::new();
     let bonder = BONDER.init(Bonder::default());
     let server = unwrap!(GattServer::new(sd));
 
+    let predicate = || !ps.is_soc_fatal() || ps.is_charging();
+
     join3(
-        ps.run_while(
-            || !ps.is_soc_fatal(),
-            || central_loop(sd, indications, events, bonder),
-        ),
-        ps.run_while(|| !ps.is_soc_fatal(), || peripheral_loop(sd, ps, &server)),
+        ps.run_while(predicate, || central_loop(sd, indications, ps, bonder)),
+        ps.run_while(predicate, || peripheral_loop(sd, ps, &server)),
         sd.run(),
     )
     .await;

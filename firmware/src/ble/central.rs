@@ -8,8 +8,9 @@ use nrf_softdevice::{
     },
     Softdevice,
 };
+use scopeguard::guard;
 
-use crate::ble::events::BluetoothEventsProxy;
+use crate::state::SystemState;
 use crate::xbox::XboxHidServiceClient;
 use crate::{
     indications::{IndicationStyle, LedIndicationsSignal},
@@ -127,10 +128,10 @@ async fn connect(
     Ok(conn)
 }
 
-async fn run_services(
+async fn run_gatt(
     conn: ble::Connection,
-    proxy: &'static BluetoothEventsProxy,
     indications: &'static LedIndicationsSignal,
+    state: &'static SystemState,
 ) -> Result<(), BleError> {
     let client: XboxHidServiceClient = gatt_client::discover(&conn).await?;
 
@@ -155,7 +156,7 @@ async fn run_services(
                 cortex_m::peripheral::SCB::sys_reset();
             }
 
-            proxy.notify_data(jd);
+            state.add_controller_sample(jd);
         }
     })
     .await;
@@ -166,15 +167,20 @@ async fn run_services(
 pub async fn central_loop(
     sd: &'static Softdevice,
     indications: &'static LedIndicationsSignal,
-    events: &'static BluetoothEventsProxy,
+    state: &'static SystemState,
     bonder: &'static Bonder,
 ) {
     let scan_connect = async || -> Result<(), BleError> {
         if let Some(address) = scan(sd, indications).await {
-            let connection = connect(sd, address, bonder, indications).await?;
-            events
-                .notify_connection(async || run_services(connection, events, indications).await)
-                .await?;
+            let conn = connect(sd, address, bonder, indications).await?;
+
+            state.set_controller_connected(true);
+            let _g = guard((), |_| state.set_controller_connected(false));
+
+            match run_gatt(conn, indications, state).await {
+                Err(e) => error!("run gatt exited with error - {}", e),
+                _ => {}
+            }
         }
 
         Ok(())

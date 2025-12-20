@@ -1,15 +1,13 @@
-use core::{
-    future::Future,
-    sync::atomic::{AtomicBool, AtomicU8, Ordering},
-};
+use core::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 
 use defmt::unwrap;
 use embassy_futures::select::select;
 use embassy_sync::{
-    blocking_mutex::raw::CriticalSectionRawMutex,
+    blocking_mutex::raw::NoopRawMutex,
     watch::{Receiver, Watch},
 };
 
+use crate::xbox::JoystickData;
 // Use simple packing to help with BLE serialization later
 #[repr(C, packed)]
 #[derive(Default, Copy, Clone)]
@@ -27,15 +25,18 @@ pub enum UpdateType {
     PeriodicUpdate(PeriodicUpdate),
     GyroSample(i16),
     PidUpdate(f32, f32, f32),
+    ControllerConnection(bool),
+    ControllerData(JoystickData),
 }
 
-type StatsWatch = Watch<CriticalSectionRawMutex, UpdateType, 4>;
-type StatsReceiver<'a> = Receiver<'a, CriticalSectionRawMutex, UpdateType, 4>;
+type StatsWatch = Watch<NoopRawMutex, UpdateType, 8>;
+type StatsReceiver<'a> = Receiver<'a, NoopRawMutex, UpdateType, 8>;
 
 pub struct SystemState {
     charging: AtomicBool,
     charger_failure: AtomicBool,
     soc: AtomicU8,
+    controller_connected: AtomicBool,
 
     watch: StatsWatch,
 }
@@ -96,11 +97,24 @@ impl<'a> SystemState {
         self.notify(UpdateType::PidUpdate(p, i, d));
     }
 
-    pub async fn run_while<C, F, Fut>(&self, cond: C, mut fun: F)
+    pub fn set_controller_connected(&self, connected: bool) {
+        self.controller_connected
+            .store(connected, Ordering::Relaxed);
+        self.notify(UpdateType::ControllerConnection(connected));
+    }
+
+    pub fn is_controller_connected(&self) -> bool {
+        self.controller_connected.load(Ordering::Relaxed)
+    }
+
+    pub fn add_controller_sample(&self, j: JoystickData) {
+        self.notify(UpdateType::ControllerData(j));
+    }
+
+    pub async fn run_while<C, F>(&self, cond: C, mut fun: F)
     where
         C: Fn() -> bool,
-        F: FnMut() -> Fut,
-        Fut: Future<Output = ()>,
+        F: AsyncFnMut(),
     {
         let mut receiver = unwrap!(self.event_receiver());
 
@@ -126,6 +140,7 @@ impl<'a> SystemState {
             charger_failure: Default::default(),
             charging: Default::default(),
             soc: Default::default(),
+            controller_connected: Default::default(),
 
             watch: Watch::new(),
         }

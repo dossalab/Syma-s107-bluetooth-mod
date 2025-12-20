@@ -2,7 +2,6 @@
 #![no_main]
 
 use assign_resources::assign_resources;
-use ble::events::BluetoothEventsProxy;
 use state::SystemState;
 use static_cell::StaticCell;
 
@@ -135,19 +134,9 @@ async fn main(spawner: Spawner) {
     let power_stats = POWER_STATS.init(SystemState::new());
 
     static LED_INDICATIONS: LedIndicationsSignal = Signal::new();
-    static BLE_EVENTS: BluetoothEventsProxy = BluetoothEventsProxy::new();
 
     spawner.spawn(unwrap!(indications::run(&LED_INDICATIONS, r.led_switch)));
-    spawner.spawn(unwrap!(ble::run(
-        sd,
-        power_stats,
-        &LED_INDICATIONS,
-        &BLE_EVENTS
-    )));
-    spawner.spawn(unwrap!(control::run(
-        &BLE_EVENTS,
-        power_stats,
-        r.controller,
-    )));
+    spawner.spawn(unwrap!(ble::run(sd, power_stats, &LED_INDICATIONS,)));
+    spawner.spawn(unwrap!(control::run(power_stats, r.controller,)));
     spawner.spawn(unwrap!(power::run(power_stats, r.power, i2c)));
 }

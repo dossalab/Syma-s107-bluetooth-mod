@@ -75,7 +75,7 @@ async fn run_gatt(server: &GattServer, conn: &Connection, ps: &SystemState) {
     let handle_control = |e| match e {
         ControlServiceEvent::RebootRequestWrite(_) => {}
         ControlServiceEvent::PidUpdateRequestWrite(PidUpdate { p, i, d }) => {
-            ps.update_controller_pid(p as f32 / 10.0, i as f32 / 10.0, d as f32 / 10.0)
+            ps.update_controller_pid(p as f32 / 100.0, i as f32 / 100.0, d as f32 / 100.0)
         }
     };
 

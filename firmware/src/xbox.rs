@@ -24,7 +24,7 @@ bitflags! {
     }
 }
 
-#[derive(defmt::Format, Default)]
+#[derive(defmt::Format, Default, Copy, Clone)]
 pub struct JoystickData {
     pub j1: (i32, i32),
     pub j2: (i32, i32),

@@ -1,15 +1,14 @@
 use defmt::info;
-use embassy_futures::select::select;
+use embassy_futures::select::{select, Either};
 use embassy_nrf::{
     gpio::{self, Level, Output, OutputDrive},
     pwm::{self, DutyCycle, SimplePwm},
     saadc::{self, Saadc},
 };
-use embassy_time::{Duration, Instant, Ticker};
+use embassy_time::{Duration, Ticker, Timer};
 use pid::Pid;
 
 use crate::{
-    ble::events::BluetoothEventsProxy,
     state::{SystemState, UpdateType},
     xbox::JoystickData,
     ControllerResources, Irqs,
@@ -18,16 +17,17 @@ use crate::{
 struct Controller<'a> {
     pwm: SimplePwm<'a>,
     adc: Saadc<'a, 1>,
-    gyro_power: gpio::Output<'a>,
+    _gyro_power: gpio::Output<'a>,
     tail_n: gpio::Output<'a>,
     pid: Pid<f32>,
-    ps: &'a SystemState,
+    input: JoystickData,
+    gyro_offset: i32,
 }
 
 impl<'a> Controller<'a> {
     const PWM_MAX_DUTY: u16 = 512;
+    const PID_CONTROL_LIMIT: u16 = Self::PWM_MAX_DUTY / 2;
     const RECEIVE_TIMEOUT: Duration = Duration::from_secs(1);
-    const CONTROL_LOOP_FREQUENCY_HZ: u64 = 200;
 
     fn set_pwm(&mut self, r1: i32, r2: i32, v: i32) {
         let clamp_to_pwm = |x: i32| x.clamp(0, Self::PWM_MAX_DUTY as i32) as u16;
@@ -60,15 +60,19 @@ impl<'a> Controller<'a> {
         // Vdiff (volts) = reading * 0.6 / (gain * 2^resolution-1) = reading * 0.6 / 2048
         // speed = Vdiff (volts) * 1000 / 0.67 = Vdiff * 600 / (2048 * 0.67)
 
-        let val = buf[0] + 717;
+        let val = buf[0] as i32 + self.gyro_offset;
         val as f32 * 600.0 / (2048.0 * 0.5 * 0.67)
     }
 
-    fn update(&mut self, position: &JoystickData, ang_rate: f32) {
-        let throttle = (position.j1.1 >> 6).max(0);
-        let yaw = position.j2.0 >> 6;
+    async fn tick(&mut self) {
+        let throttle = (self.input.j1.1 >> 6).max(0);
+        let yaw = self.input.j2.0 >> 6;
 
-        let control = if throttle > 50 {
+        let control = if throttle > 10 {
+            let ang_rate = self.read_angular_speed().await;
+
+            info!("ang rate: {}", ang_rate);
+
             self.pid.setpoint = -yaw as f32;
             self.pid.next_control_output(ang_rate).output as i32
         } else {
@@ -77,54 +81,23 @@ impl<'a> Controller<'a> {
 
         let rotor1 = throttle + control;
         let rotor2 = throttle - control;
-        let elevator = position.j2.1 >> 6;
+        let elevator = self.input.j2.1 >> 6;
 
         self.set_pwm(rotor1, rotor2, elevator);
     }
 
-    async fn run(&mut self, proxy: &BluetoothEventsProxy) {
-        let mut receiver = self.ps.event_receiver().unwrap();
-
-        let mut ticker = Ticker::every(Duration::from_hz(Self::CONTROL_LOOP_FREQUENCY_HZ));
-        let mut input: JoystickData = Default::default();
-
-        let mut last_receive = Instant::now();
-
-        self.adc.calibrate().await;
-        self.gyro_power.set_high();
-
-        loop {
-            if let Some(event) = receiver.try_changed() {
-                match event {
-                    UpdateType::PidUpdate(p, i, d) => {
-                        info!("updating pid params: p: {}, i: {}, d: {}", p, i, d);
-                        self.pid.p(p, 100.0).i(i, 100.0).d(d, 100.0);
-                    }
-                    _ => {}
-                }
-            }
-
-            // Just take the latest value if any
-            if let Some(data) = proxy.joystick_data_take() {
-                input = data;
-                last_receive = Instant::now();
-            }
-
-            if Instant::now().duration_since(last_receive) > Self::RECEIVE_TIMEOUT {
-                input = Default::default();
-            }
-
-            let speed = self.read_angular_speed().await;
-            self.update(&input, speed);
-
-            // XXX: This might be too fast...
-            // self.ps.add_gyro_sample(speed as i16);
-
-            ticker.next().await;
-        }
+    fn add_input(&mut self, jd: JoystickData) {
+        self.input = jd;
     }
 
-    fn new(r: &'a mut ControllerResources, ps: &'a SystemState) -> Self {
+    fn set_pid(&mut self, p: f32, i: f32, d: f32) {
+        self.pid
+            .p(p, Self::PID_CONTROL_LIMIT)
+            .i(i, Self::PID_CONTROL_LIMIT)
+            .d(d, Self::PID_CONTROL_LIMIT);
+    }
+
+    async fn init(r: &'a mut ControllerResources) -> Self {
         let mut pwm_config = pwm::SimpleConfig::default();
 
         pwm_config.max_duty = Controller::PWM_MAX_DUTY;
@@ -158,36 +131,63 @@ impl<'a> Controller<'a> {
 
         let adc = saadc::Saadc::new(r.adc.reborrow(), Irqs, adc_config, [adc_channel_config]);
 
-        let gyro_power = Output::new(r.gyro_power.reborrow(), Level::Low, OutputDrive::Standard);
+        let gyro_power = Output::new(r.gyro_power.reborrow(), Level::High, OutputDrive::Standard);
         let tail_n = Output::new(r.tail_n.reborrow(), Level::Low, OutputDrive::Standard);
 
-        let mut pid = Pid::new(0.0, 1000.0);
-        pid.p(2.0, 1000.0).i(0.0, 1000.0).d(0.0, 1000.0);
+        let mut pid = Pid::new(0.0, Self::PWM_MAX_DUTY);
+        pid.p(0.3, Self::PID_CONTROL_LIMIT)
+            .i(0.0, Self::PID_CONTROL_LIMIT)
+            .d(0.0, Self::PID_CONTROL_LIMIT);
+
+        adc.calibrate().await;
+
+        // Give gyro some time to settle
+        Timer::after_millis(50).await;
 
         Self {
             adc,
-            gyro_power,
+            _gyro_power: gyro_power,
             pwm,
             tail_n,
             pid,
-            ps,
+            input: Default::default(),
+            gyro_offset: 742,
         }
     }
 }
 
 #[embassy_executor::task]
-pub async fn run(
-    proxy: &'static BluetoothEventsProxy,
-    ps: &'static SystemState,
-    mut r: ControllerResources,
-) {
-    loop {
-        let mut run_controller = async |proxy| {
-            let mut c = Controller::new(&mut r, ps);
-            c.run(proxy).await;
-        };
+pub async fn run(state: &'static SystemState, mut r: ControllerResources) {
+    let mut receiver = state.event_receiver().unwrap();
 
-        proxy.wait_connect().await;
-        select(run_controller(proxy), proxy.wait_disconnect()).await;
-    }
+    let run_controller = async || {
+        info!("running controller");
+
+        const CONTROL_LOOP_RATE: Duration = Duration::from_hz(200);
+
+        let mut controller = Controller::init(&mut r).await;
+        let mut ticker = Ticker::every(CONTROL_LOOP_RATE);
+
+        loop {
+            let r = select(receiver.changed(), ticker.next()).await;
+            match r {
+                Either::First(event) => match event {
+                    UpdateType::PidUpdate(p, i, d) => {
+                        info!("updating pid params: p: {}, i: {}, d: {}", p, i, d);
+                        controller.set_pid(p, i, d);
+                    }
+
+                    UpdateType::ControllerData(jd) => controller.add_input(jd),
+                    _ => {}
+                },
+
+                Either::Second(_) => controller.tick().await,
+            }
+        }
+    };
+
+    let predicate =
+        || !state.is_charging() && !state.is_soc_fatal() && state.is_controller_connected();
+
+    state.run_while(predicate, run_controller).await;
 }
