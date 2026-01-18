@@ -1,4 +1,4 @@
-use defmt::info;
+use defmt::{info, unwrap};
 use embassy_futures::select::{select, Either};
 use embassy_nrf::{
     gpio::{self, Level, Output, OutputDrive},
@@ -158,7 +158,7 @@ impl<'a> Controller<'a> {
 
 #[embassy_executor::task]
 pub async fn run(state: &'static SystemState, mut r: ControllerResources) {
-    let mut receiver = state.event_receiver().unwrap();
+    let mut receiver = unwrap!(state.event_receiver());
 
     let run_controller = async || {
         info!("running controller");
