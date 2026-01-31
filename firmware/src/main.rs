@@ -27,6 +27,8 @@ mod executor;
 mod indications;
 mod power;
 mod state;
+mod types;
+mod utils;
 mod xbox;
 
 use defmt_rtt as _;
@@ -130,13 +132,14 @@ async fn main(spawner: Spawner) {
 
     info!("ble-copter ({}) is running. Hello!", git_version!());
 
-    static POWER_STATS: StaticCell<SystemState> = StaticCell::new();
-    let power_stats = POWER_STATS.init(SystemState::new());
+    static SYSTEM_STATE: StaticCell<SystemState> = StaticCell::new();
+    let system_state = SYSTEM_STATE.init(SystemState::new());
 
     static LED_INDICATIONS: LedIndicationsSignal = Signal::new();
 
     spawner.spawn(unwrap!(indications::run(&LED_INDICATIONS, r.led_switch)));
-    spawner.spawn(unwrap!(ble::run(sd, power_stats, &LED_INDICATIONS,)));
-    spawner.spawn(unwrap!(control::run(power_stats, r.controller,)));
-    spawner.spawn(unwrap!(power::run(power_stats, r.power, i2c)));
+    spawner.spawn(unwrap!(ble::run(sd, system_state, &LED_INDICATIONS)));
+    spawner.spawn(unwrap!(control::run(system_state, r.controller,)));
+    spawner.spawn(unwrap!(power::run(system_state, r.power, i2c)));
+    spawner.spawn(unwrap!(state::run(system_state)));
 }

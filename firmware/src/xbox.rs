@@ -1,61 +1,12 @@
 // Xbox one controller hid defs
 
 use byteorder::{ByteOrder, LittleEndian};
-use defmt::bitflags;
 use nrf_softdevice::gatt_client;
+
+use crate::types::{ButtonFlags, JoystickData};
 
 pub const STICKS_RANGE: i32 = 65535;
 
-bitflags! {
-    #[derive(Default)]
-    pub struct ButtonFlags:u32 {
-        const BUTTON_A = 1 << 0;
-        const BUTTON_B = 1 << 1;
-        const BUTTON_X = 1 << 3;
-        const BUTTON_Y = 1 << 4;
-        const BUTTON_LB = 1 << 6;
-        const BUTTON_RB = 1 << 7;
-        const BUTTON_ACTION_1 = 1 << 10;
-        const BUTTON_MENU = 1 << 11;
-        const BUTTON_XBOX = 1 << 12;
-        const BUTTON_LEFT_STICK = 1 << 13;
-        const BUTTON_RIGHT_STICK = 1 << 14;
-        const BUTTON_ACTION_2 = 1 << 16;
-    }
-}
-
-#[derive(defmt::Format, Default, Copy, Clone)]
-pub struct JoystickData {
-    pub j1: (i32, i32),
-    pub j2: (i32, i32),
-    pub t1: u16,
-    pub t2: u16,
-    pub buttons: ButtonFlags,
-}
-
-impl JoystickData {
-    pub fn from_packet(p: &[u8; 16]) -> Self {
-        let button_mask = LittleEndian::read_u24(&p[13..16]);
-
-        let x1 = LittleEndian::read_u16(&p[0..2]);
-        let y1 = LittleEndian::read_u16(&p[2..4]);
-        let x2 = LittleEndian::read_u16(&p[4..6]);
-        let y2 = LittleEndian::read_u16(&p[6..8]);
-
-        let t1 = LittleEndian::read_u16(&p[8..10]);
-        let t2 = LittleEndian::read_u16(&p[10..12]);
-
-        let map_stick = |x| (x as i32) - STICKS_RANGE / 2;
-
-        JoystickData {
-            j1: (map_stick(x1), -map_stick(y1)),
-            j2: (map_stick(x2), -map_stick(y2)),
-            t1,
-            t2,
-            buttons: ButtonFlags::from_bits_truncate(button_mask),
-        }
-    }
-}
 #[gatt_client(uuid = "1812")]
 pub struct XboxHidServiceClient {
     #[characteristic(uuid = "2a4b", read)]
@@ -121,4 +72,26 @@ pub fn is_xbox_controller(packet: &[u8]) -> bool {
     }
 
     is_microsoft && is_hid
+}
+
+pub fn decode_hid_report(p: &[u8; 16]) -> JoystickData {
+    let button_mask = LittleEndian::read_u24(&p[13..16]);
+
+    let x1 = LittleEndian::read_u16(&p[0..2]);
+    let y1 = LittleEndian::read_u16(&p[2..4]);
+    let x2 = LittleEndian::read_u16(&p[4..6]);
+    let y2 = LittleEndian::read_u16(&p[6..8]);
+
+    let t1 = LittleEndian::read_u16(&p[8..10]);
+    let t2 = LittleEndian::read_u16(&p[10..12]);
+
+    let map_stick = |x| (x as i32) - STICKS_RANGE / 2;
+
+    JoystickData {
+        j1: (map_stick(x1), -map_stick(y1)),
+        j2: (map_stick(x2), -map_stick(y2)),
+        t1,
+        t2,
+        buttons: ButtonFlags::from_bits_truncate(button_mask),
+    }
 }

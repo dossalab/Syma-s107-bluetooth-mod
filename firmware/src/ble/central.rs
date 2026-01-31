@@ -11,11 +11,11 @@ use nrf_softdevice::{
 use scopeguard::guard;
 
 use crate::state::SystemState;
-use crate::xbox::XboxHidServiceClient;
 use crate::{
     indications::{IndicationStyle, LedIndicationsSignal},
     xbox::{self, XboxHidServiceClientEvent},
 };
+use crate::{types::ButtonFlags, xbox::XboxHidServiceClient};
 
 use super::errors::BleError;
 
@@ -131,8 +131,9 @@ async fn connect(
 async fn run_gatt(
     conn: ble::Connection,
     indications: &'static LedIndicationsSignal,
-    state: &'static SystemState,
+    stats: &'static SystemState,
 ) -> Result<(), BleError> {
+    let controller_sample_sender = stats.controller_sample.sender();
     let client: XboxHidServiceClient = gatt_client::discover(&conn).await?;
 
     debug!("services discovered!");
@@ -150,13 +151,13 @@ async fn run_gatt(
 
     gatt_client::run(&conn, &client, |event| match event {
         XboxHidServiceClientEvent::HidReportNotification(val) => {
-            let jd = xbox::JoystickData::from_packet(&val);
+            let jd = xbox::decode_hid_report(&val);
 
-            if jd.buttons.contains(xbox::ButtonFlags::BUTTON_RB) {
+            if jd.buttons.contains(ButtonFlags::BUTTON_RB) {
                 cortex_m::peripheral::SCB::sys_reset();
             }
 
-            state.add_controller_sample(jd);
+            controller_sample_sender.send(jd);
         }
     })
     .await;
@@ -170,12 +171,14 @@ pub async fn central_loop(
     state: &'static SystemState,
     bonder: &'static Bonder,
 ) {
+    let controller_connected_sender = state.controller_connected.sender();
+
     let scan_connect = async || -> Result<(), BleError> {
         if let Some(address) = scan(sd, indications).await {
             let conn = connect(sd, address, bonder, indications).await?;
 
-            state.set_controller_connected(true);
-            let _g = guard((), |_| state.set_controller_connected(false));
+            controller_connected_sender.send(true);
+            let _g = guard((), |_| controller_connected_sender.send(false));
 
             match run_gatt(conn, indications, state).await {
                 Err(e) => error!("run gatt exited with error - {}", e),

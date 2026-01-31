@@ -1,5 +1,5 @@
 use defmt::{info, unwrap};
-use embassy_futures::select::{select, Either};
+use embassy_futures::select::{select3, Either3};
 use embassy_nrf::{
     gpio::{self, Level, Output, OutputDrive},
     pwm::{self, DutyCycle, SimplePwm},
@@ -8,11 +8,7 @@ use embassy_nrf::{
 use embassy_time::{Duration, Ticker, Timer};
 use pid::Pid;
 
-use crate::{
-    state::{SystemState, UpdateType},
-    xbox::JoystickData,
-    ControllerResources, Irqs,
-};
+use crate::{state::SystemState, types::JoystickData, utils, ControllerResources, Irqs};
 
 struct Controller<'a> {
     pwm: SimplePwm<'a>,
@@ -70,8 +66,6 @@ impl<'a> Controller<'a> {
 
         let control = if throttle > 10 {
             let ang_rate = self.read_angular_speed().await;
-
-            info!("ang rate: {}", ang_rate);
 
             self.pid.setpoint = -yaw as f32;
             self.pid.next_control_output(ang_rate).output as i32
@@ -158,7 +152,9 @@ impl<'a> Controller<'a> {
 
 #[embassy_executor::task]
 pub async fn run(state: &'static SystemState, mut r: ControllerResources) {
-    let mut receiver = unwrap!(state.event_receiver());
+    let mut pid_update_receiver = unwrap!(state.pid_update.receiver());
+    let mut controller_sample_receiver = unwrap!(state.controller_sample.receiver());
+    let controller_run_allowed_receiver = unwrap!(state.controller_run_allowed.receiver());
 
     let run_controller = async || {
         info!("running controller");
@@ -169,25 +165,26 @@ pub async fn run(state: &'static SystemState, mut r: ControllerResources) {
         let mut ticker = Ticker::every(CONTROL_LOOP_RATE);
 
         loop {
-            let r = select(receiver.changed(), ticker.next()).await;
+            let r = select3(
+                pid_update_receiver.changed(),
+                controller_sample_receiver.changed(),
+                ticker.next(),
+            )
+            .await;
+
             match r {
-                Either::First(event) => match event {
-                    UpdateType::PidUpdate(p, i, d) => {
-                        info!("updating pid params: p: {}, i: {}, d: {}", p, i, d);
-                        controller.set_pid(p, i, d);
-                    }
+                Either3::First(pid) => {
+                    let (p, i, d) = (pid.get_p(), pid.get_i(), pid.get_d());
 
-                    UpdateType::ControllerData(jd) => controller.add_input(jd),
-                    _ => {}
-                },
+                    info!("updating pid params: p: {}, i: {}, d: {}", p, i, d);
+                    controller.set_pid(p, i, d);
+                }
 
-                Either::Second(_) => controller.tick().await,
+                Either3::Second(input) => controller.add_input(input),
+                Either3::Third(_) => controller.tick().await,
             }
         }
     };
 
-    let predicate =
-        || !state.is_charging() && !state.is_soc_fatal() && state.is_controller_connected();
-
-    state.run_while(predicate, run_controller).await;
+    utils::run_with_receiver(controller_run_allowed_receiver, run_controller).await;
 }

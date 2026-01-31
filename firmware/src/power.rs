@@ -1,7 +1,10 @@
 use core::future;
 
-use crate::state::{PeriodicUpdate, SystemState};
-use crate::{PowerResources, SharedI2cBus};
+use crate::{
+    state::SystemState,
+    types::{ChargerState, PeriodicUpdate},
+    PowerResources, SharedI2cBus,
+};
 use bq27xxx::{
     chips::bq27427::{ChemInfo, CurrentThresholds, RaTable, StateClass},
     defs::{ControlStatusFlags, StatusFlags},
@@ -85,10 +88,14 @@ async fn configure_gauge<'a>(gauge: &mut Gauge<'a>) -> GaugeResult<()> {
 }
 
 #[embassy_executor::task]
-pub async fn run(stats: &'static SystemState, mut r: PowerResources, i2c: &'static SharedI2cBus) {
+pub async fn run(state: &'static SystemState, mut r: PowerResources, i2c: &'static SharedI2cBus) {
     const GAUGE_I2C_ADDR: u8 = 0x55;
     const GAUGE_INIT_RETRY_INTERVAL: Duration = Duration::from_secs(10);
     const GAUGE_PERIODIC_POLL_INTERVAL: Duration = Duration::from_secs(1);
+
+    let soc_sender = state.soc.sender();
+    let periodic_update_sender = state.periodic_update.sender();
+    let charger_state_sender = state.charger_state.sender();
 
     let force_memory_update = false;
 
@@ -127,25 +134,23 @@ pub async fn run(stats: &'static SystemState, mut r: PowerResources, i2c: &'stat
 
         // SoC is important for internal decisions, so poll it once to see where we stand.
         // Other stats will be gathered as we go
-        stats.add_soc(gauge.state_of_charge().await? as u8);
+        soc_sender.send(gauge.state_of_charge().await? as u8);
 
         loop {
             let r = select(int.wait_for_low(), next_periodic_update()).await;
             match r {
                 Either::First(_) => {
                     info!("fuelgauge interrupt");
-                    stats.add_soc(gauge.state_of_charge().await? as u8);
+                    soc_sender.send(gauge.state_of_charge().await? as u8);
                 }
                 Either::Second(_) => {
                     info!("fuelgauge periodic update");
 
-                    let u = PeriodicUpdate {
+                    periodic_update_sender.send(PeriodicUpdate {
                         voltage: gauge.voltage().await?,
                         current: gauge.average_current().await?,
                         temperature: gauge.temperature().await?,
-                    };
-
-                    stats.add_periodic_update(u);
+                    });
                 }
             }
         }
@@ -155,18 +160,14 @@ pub async fn run(stats: &'static SystemState, mut r: PowerResources, i2c: &'stat
         let mut fault = Input::new(r.fault_int.reborrow(), Pull::Up);
         let mut charging = Input::new(r.charging_int.reborrow(), Pull::Up);
 
-        stats.set_charging(charging.is_low());
-        stats.set_charger_failure(fault.is_low());
-
         loop {
-            let r = select(charging.wait_for_any_edge(), fault.wait_for_any_edge()).await;
+            charger_state_sender.send(ChargerState {
+                charging: charging.is_low(),
+                failure: fault.is_low(),
+            });
 
+            select(charging.wait_for_any_edge(), fault.wait_for_any_edge()).await;
             info!("charger status update");
-
-            match r {
-                Either::First(_) => stats.set_charging(charging.is_low()),
-                Either::Second(_) => stats.set_charger_failure(fault.is_low()),
-            };
         }
     };
 

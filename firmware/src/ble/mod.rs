@@ -21,11 +21,9 @@ pub async fn run(
     let bonder = BONDER.init(Bonder::default());
     let server = unwrap!(GattServer::new(sd));
 
-    let predicate = || !ps.is_soc_fatal() || ps.is_charging();
-
     join3(
-        ps.run_while(predicate, || central_loop(sd, indications, ps, bonder)),
-        ps.run_while(predicate, || peripheral_loop(sd, ps, &server)),
+        central_loop(sd, indications, ps, bonder),
+        peripheral_loop(sd, ps, &server),
         sd.run(),
     )
     .await;

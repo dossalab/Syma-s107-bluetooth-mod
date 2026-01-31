@@ -9,6 +9,7 @@ pub enum BleError {
     ReadError(gatt_client::ReadError),
     AdvertiseError(peripheral::AdvertiseError),
     NotifyValueError(gatt_server::NotifyValueError),
+    IndicateValueError(gatt_server::IndicateValueError),
     SetValueError(gatt_server::SetValueError),
 }
 
@@ -51,5 +52,11 @@ impl From<gatt_server::SetValueError> for BleError {
 impl From<gatt_server::NotifyValueError> for BleError {
     fn from(value: gatt_server::NotifyValueError) -> Self {
         return Self::NotifyValueError(value);
+    }
+}
+
+impl From<gatt_server::IndicateValueError> for BleError {
+    fn from(value: gatt_server::IndicateValueError) -> Self {
+        return Self::IndicateValueError(value);
     }
 }

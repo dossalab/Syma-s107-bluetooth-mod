@@ -1,5 +1,5 @@
 use defmt::{debug, error, info, unwrap, warn};
-use embassy_futures::select::{select, Either};
+use embassy_futures::select::{select, select3, Either, Either3};
 use embassy_time::Timer;
 use nrf_softdevice::ble::advertisement_builder::{
     Flag, LegacyAdvertisementBuilder, LegacyAdvertisementPayload, ServiceList,
@@ -7,7 +7,8 @@ use nrf_softdevice::ble::advertisement_builder::{
 use nrf_softdevice::ble::{gatt_server, peripheral, Connection, Primitive};
 use nrf_softdevice::Softdevice;
 
-use crate::state::{PeriodicUpdate, SystemState, UpdateType};
+use crate::state::SystemState;
+use crate::types::{ChargerState, PeriodicUpdate, PidUpdate};
 
 use super::errors::BleError;
 
@@ -17,16 +18,8 @@ pub struct BatteryService {
     battery_level: u8,
 }
 
-#[repr(C, packed)]
-#[derive(Default, Copy, Clone)]
-pub struct PidUpdate {
-    // let's use 0.0 fixed point format to not waste space
-    pub p: u16,
-    pub i: u16,
-    pub d: u16,
-}
-
 unsafe impl Primitive for PeriodicUpdate {}
+unsafe impl Primitive for ChargerState {}
 unsafe impl Primitive for PidUpdate {}
 
 // Help clients find us by using that uuid
@@ -37,15 +30,12 @@ const POWER_SERVICE_UUID_BYTES: [u8; 16] =
 #[nrf_softdevice::gatt_service(uuid = "38924a07-23d7-43fe-af5d-9c887a089cf1")]
 pub struct PowerService {
     #[characteristic(uuid = "38924a07-23d7-43fe-af5d-9c887a189cf1", read, notify)]
-    charger_connected: bool,
+    charger_state: ChargerState,
 
-    #[characteristic(uuid = "38924a07-23d7-43fe-af5d-9c887a289cf1", read, notify)]
-    charger_failure: bool,
-
-    #[characteristic(uuid = "38924a07-23d7-43fe-af5d-9c887a389cf1", notify)]
+    #[characteristic(uuid = "38924a07-23d7-43fe-af5d-9c887a289cf1", notify)]
     periodic_update: PeriodicUpdate,
 
-    #[characteristic(uuid = "38924a07-23d7-43fe-af5d-9c887a489cf1", notify)]
+    #[characteristic(uuid = "38924a07-23d7-43fe-af5d-9c887a389cf1", notify)]
     gyro: i16,
 }
 
@@ -65,7 +55,9 @@ pub struct GattServer {
     control: ControlService,
 }
 
-async fn run_gatt(server: &GattServer, conn: &Connection, ps: &SystemState) {
+async fn run_gatt(server: &GattServer, conn: &Connection, state: &SystemState) {
+    let pid_update_sender = state.pid_update.sender();
+
     let handle_bas = |e| match e {
         BatteryServiceEvent::BatteryLevelCccdWrite { notifications } => {
             info!("battery notifications: {}", notifications)
@@ -74,9 +66,7 @@ async fn run_gatt(server: &GattServer, conn: &Connection, ps: &SystemState) {
 
     let handle_control = |e| match e {
         ControlServiceEvent::RebootRequestWrite(_) => {}
-        ControlServiceEvent::PidUpdateRequestWrite(PidUpdate { p, i, d }) => {
-            ps.update_controller_pid(p as f32 / 100.0, i as f32 / 100.0, d as f32 / 100.0)
-        }
+        ControlServiceEvent::PidUpdateRequestWrite(pid) => pid_update_sender.send(pid),
     };
 
     gatt_server::run(conn, server, |e| match e {
@@ -88,37 +78,38 @@ async fn run_gatt(server: &GattServer, conn: &Connection, ps: &SystemState) {
 }
 
 async fn run_notifications(
-    ps: &SystemState,
+    state: &SystemState,
     conn: &Connection,
     server: &GattServer,
 ) -> Result<(), BleError> {
-    // Sync current state once
-    server.bas.battery_level_set(&ps.soc())?;
-    server.power.charger_connected_set(&ps.is_charging())?;
-    server
-        .power
-        .charger_failure_set(&ps.is_charging_failure())?;
+    let mut soc_receiver = unwrap!(state.soc.receiver());
+    let mut charger_state_receiver = unwrap!(state.charger_state.receiver());
+    let mut periodic_update_receiver = unwrap!(state.periodic_update.receiver());
 
-    // And then wait for the updates
-    let mut receiver = unwrap!(ps.event_receiver());
+    if let Some(soc) = soc_receiver.try_get() {
+        server.bas.battery_level_set(&soc)?;
+    }
+
+    if let Some(charger_state) = charger_state_receiver.try_get() {
+        server.power.charger_state_set(&charger_state)?;
+    }
+
     loop {
-        let mut next_update = async || -> Result<(), BleError> {
-            match receiver.changed().await {
-                UpdateType::Soc(v) => server.bas.battery_level_notify(conn, &v)?,
-                UpdateType::ChargingStatus(v) => server.power.charger_connected_notify(conn, &v)?,
-                UpdateType::ChargingFailure(v) => server.power.charger_failure_notify(conn, &v)?,
-                UpdateType::PeriodicUpdate(v) => server.power.periodic_update_notify(conn, &v)?,
-                UpdateType::GyroSample(v) => server.power.gyro_notify(conn, &v)?,
+        let r = select3(
+            soc_receiver.changed(),
+            charger_state_receiver.changed(),
+            periodic_update_receiver.changed(),
+        )
+        .await;
 
-                _ => {}
-            }
-
-            Ok(())
+        let err = match r {
+            Either3::First(x) => server.bas.battery_level_notify(conn, &x),
+            Either3::Second(x) => server.power.charger_state_notify(conn, &x),
+            Either3::Third(x) => server.power.periodic_update_notify(conn, &x),
         };
 
-        // XXX: we fail to notify if corresponding notification is disabled - is this a problem?
-        if let Err(e) = next_update().await {
-            warn!("notify error - {}", e)
+        if let Err(x) = err {
+            warn!("unable to notify - {}", x);
         }
     }
 }
