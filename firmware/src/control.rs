@@ -135,9 +135,9 @@ impl<'a> Controller<'a> {
         let tail_n = Output::new(r.tail_n.reborrow(), Level::Low, OutputDrive::Standard);
 
         let mut pid = Pid::new(0.0, Self::PWM_MAX_DUTY);
-        pid.p(0.3, Self::PID_CONTROL_LIMIT)
-            .i(0.0, Self::PID_CONTROL_LIMIT)
-            .d(0.0, Self::PID_CONTROL_LIMIT);
+        pid.p(0.5, Self::PID_CONTROL_LIMIT)
+            .i(0.2, Self::PID_CONTROL_LIMIT)
+            .d(0.2, Self::PID_CONTROL_LIMIT);
 
         adc.calibrate().await;
 
