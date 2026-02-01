@@ -121,8 +121,6 @@ pub async fn run(state: &'static SystemState, mut r: PowerResources, i2c: &'stat
         let mut int = Input::new(r.fuelgauge_int.reborrow(), Pull::Up);
         let mut gauge = Bq27xx::new(dev, embassy_time::Delay, GAUGE_I2C_ADDR);
 
-        gauge.probe().await?;
-
         let next_periodic_update = async || match do_periodic {
             true => Timer::after(GAUGE_PERIODIC_POLL_INTERVAL).await,
             false => future::pending().await,
@@ -157,6 +155,8 @@ pub async fn run(state: &'static SystemState, mut r: PowerResources, i2c: &'stat
                         info!("fuelgauge ITPOR condition");
 
                         wait_gauge_init_complete(&mut gauge).await?;
+
+                        gauge.probe().await?;
                         configure_gauge(&mut gauge).await?;
                     }
 
