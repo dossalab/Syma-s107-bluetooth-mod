@@ -11,8 +11,8 @@ use nrf_softdevice::{
 use scopeguard::guard;
 
 use crate::state::SystemState;
+use crate::xbox::XboxHidServiceClient;
 use crate::xbox::{self, XboxHidServiceClientEvent};
-use crate::{types::ButtonFlags, xbox::XboxHidServiceClient};
 
 use super::errors::BleError;
 
@@ -138,11 +138,6 @@ async fn run_gatt(conn: ble::Connection, stats: &'static SystemState) -> Result<
     gatt_client::run(&conn, &client, |event| match event {
         XboxHidServiceClientEvent::HidReportNotification(val) => {
             let jd = xbox::decode_hid_report(&val);
-
-            if jd.buttons.contains(ButtonFlags::BUTTON_RB) {
-                cortex_m::peripheral::SCB::sys_reset();
-            }
-
             controller_sample_sender.send(jd);
         }
     })

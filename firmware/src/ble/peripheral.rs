@@ -1,4 +1,4 @@
-use defmt::{debug, error, info, unwrap, warn};
+use defmt::{debug, error, unwrap, warn};
 use embassy_futures::select::{select, select3, Either, Either3};
 use embassy_time::Timer;
 use nrf_softdevice::ble::advertisement_builder::{
@@ -7,8 +7,8 @@ use nrf_softdevice::ble::advertisement_builder::{
 use nrf_softdevice::ble::{gatt_server, peripheral, Connection, Primitive};
 use nrf_softdevice::Softdevice;
 
-use crate::state::SystemState;
-use crate::types::{ChargerState, PeriodicUpdate, PidUpdate};
+use crate::state::{Request, SystemState};
+use crate::types::{ChargerState, PeriodicUpdate, PidParams};
 
 use super::errors::BleError;
 
@@ -20,7 +20,7 @@ pub struct BatteryService {
 
 unsafe impl Primitive for PeriodicUpdate {}
 unsafe impl Primitive for ChargerState {}
-unsafe impl Primitive for PidUpdate {}
+unsafe impl Primitive for PidParams {}
 
 // Help clients find us by using that uuid
 const POWER_SERVICE_UUID_BYTES: [u8; 16] =
@@ -40,39 +40,51 @@ pub struct PowerService {
 }
 
 #[nrf_softdevice::gatt_service(uuid = "38924a07-23d7-43fe-af5d-9c887b089cf1")]
-pub struct ControlService {
+pub struct RequestsService {
     #[characteristic(uuid = "38924a07-23d7-43fe-af5d-9c887b189cf1", write)]
-    reboot_request: bool,
+    reboot: bool,
 
     #[characteristic(uuid = "38924a07-23d7-43fe-af5d-9c887b289cf1", write)]
-    pid_update_request: PidUpdate,
+    pid_update: PidParams,
+
+    #[characteristic(uuid = "38924a07-23d7-43fe-af5d-9c887b389cf1", write)]
+    fuelgauge_reset: bool,
 }
 
 #[nrf_softdevice::gatt_server]
 pub struct GattServer {
     bas: BatteryService,
     power: PowerService,
-    control: ControlService,
+    requests: RequestsService,
 }
 
 async fn run_gatt(server: &GattServer, conn: &Connection, state: &SystemState) {
-    let pid_update_sender = state.pid_update.sender();
+    let host_request_sender = state.requests.sender();
 
     let handle_bas = |e| match e {
-        BatteryServiceEvent::BatteryLevelCccdWrite { notifications } => {
-            info!("battery notifications: {}", notifications)
-        }
+        _ => {}
     };
 
-    let handle_control = |e| match e {
-        ControlServiceEvent::RebootRequestWrite(_) => {}
-        ControlServiceEvent::PidUpdateRequestWrite(pid) => pid_update_sender.send(pid),
+    let handle_requests = |e| {
+        let request = match e {
+            RequestsServiceEvent::RebootWrite(true) => Request::Reboot,
+            RequestsServiceEvent::PidUpdateWrite(pid) => Request::PidUpdate(pid),
+            RequestsServiceEvent::FuelgaugeResetWrite(true) => Request::FuelgaugeReset,
+
+            _ => return,
+        };
+
+        host_request_sender.send(request);
+    };
+
+    let handle_power = |e| match e {
+        _ => {}
     };
 
     gatt_server::run(conn, server, |e| match e {
         GattServerEvent::Bas(e) => handle_bas(e),
-        GattServerEvent::Control(e) => handle_control(e),
-        _ => {}
+        GattServerEvent::Requests(e) => handle_requests(e),
+        GattServerEvent::Power(e) => handle_power(e),
     })
     .await;
 }

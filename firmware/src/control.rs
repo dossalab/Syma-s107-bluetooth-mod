@@ -8,7 +8,11 @@ use embassy_nrf::{
 use embassy_time::{Duration, Ticker, Timer};
 use pid::Pid;
 
-use crate::{state::SystemState, types::JoystickData, utils, ControllerResources, Irqs};
+use crate::{
+    state::{Request, SystemState},
+    types::JoystickData,
+    utils, ControllerResources, Irqs,
+};
 
 struct Controller<'a> {
     pwm: SimplePwm<'a>,
@@ -152,7 +156,7 @@ impl<'a> Controller<'a> {
 
 #[embassy_executor::task]
 pub async fn run(state: &'static SystemState, mut r: ControllerResources) {
-    let mut pid_update_receiver = unwrap!(state.pid_update.receiver());
+    let mut request_receiver = unwrap!(state.requests.receiver());
     let mut controller_sample_receiver = unwrap!(state.controller_sample.receiver());
     let controller_run_allowed_receiver = unwrap!(state.controller_run_allowed.receiver());
 
@@ -166,19 +170,21 @@ pub async fn run(state: &'static SystemState, mut r: ControllerResources) {
 
         loop {
             let r = select3(
-                pid_update_receiver.changed(),
+                request_receiver.changed(),
                 controller_sample_receiver.changed(),
                 ticker.next(),
             )
             .await;
 
             match r {
-                Either3::First(pid) => {
+                Either3::First(Request::PidUpdate(pid)) => {
                     let (p, i, d) = (pid.get_p(), pid.get_i(), pid.get_d());
 
                     info!("updating pid params: p: {}, i: {}, d: {}", p, i, d);
                     controller.set_pid(p, i, d);
                 }
+
+                Either3::First(_) => {}
 
                 Either3::Second(input) => controller.add_input(input),
                 Either3::Third(_) => controller.tick().await,

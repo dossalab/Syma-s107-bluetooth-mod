@@ -19,14 +19,14 @@ pub struct ChargerState {
 
 #[repr(C, packed)]
 #[derive(Default, Copy, Clone)]
-pub struct PidUpdate {
+pub struct PidParams {
     // let's use fixed point format to not waste space
     pub unscaled_p: u16,
     pub unscaled_i: u16,
     pub unscaled_d: u16,
 }
 
-impl PidUpdate {
+impl PidParams {
     pub fn get_p(&self) -> f32 {
         return self.unscaled_p as f32 / 100.0;
     }

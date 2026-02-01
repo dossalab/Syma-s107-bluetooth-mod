@@ -1,14 +1,21 @@
-use defmt::{info, unwrap};
-use embassy_futures::select::select3;
+use defmt::{info, unwrap, warn};
+use embassy_futures::select::{select4, Either4};
 use embassy_sync::{
     blocking_mutex::raw::NoopRawMutex,
     watch::{Receiver, Watch},
 };
 
-use crate::types::{ChargerState, JoystickData, PeriodicUpdate, PidUpdate};
+use crate::types::{ChargerState, JoystickData, PeriodicUpdate, PidParams};
 
 pub type StateWatch<T> = Watch<NoopRawMutex, T, 8>;
 pub type StateReceiver<'a, T> = Receiver<'a, NoopRawMutex, T, 8>;
+
+#[derive(Clone)]
+pub enum Request {
+    PidUpdate(PidParams),
+    Reboot,
+    FuelgaugeReset,
+}
 
 pub struct SystemState {
     pub charger_state: StateWatch<ChargerState>,
@@ -16,7 +23,7 @@ pub struct SystemState {
     pub controller_connected: StateWatch<bool>,
     pub periodic_update: StateWatch<PeriodicUpdate>,
     pub controller_sample: StateWatch<JoystickData>,
-    pub pid_update: StateWatch<PidUpdate>,
+    pub requests: StateWatch<Request>,
     pub controller_run_allowed: StateWatch<bool>,
 }
 
@@ -28,7 +35,7 @@ impl<'a> SystemState {
             controller_connected: Watch::new_with(false),
             periodic_update: Watch::new(),
             controller_sample: Watch::new(),
-            pid_update: Watch::new(),
+            requests: Watch::new(),
             controller_run_allowed: Watch::new_with(false),
         }
     }
@@ -43,6 +50,7 @@ pub async fn run(state: &'static SystemState) {
     let mut soc_receiver = unwrap!(state.soc.receiver());
     let mut controller_connected_receiver = unwrap!(state.controller_connected.receiver());
     let mut charger_state_receiver = unwrap!(state.charger_state.receiver());
+    let mut requests_receiver = unwrap!(state.requests.receiver());
     let controller_run_allowed_sender = state.controller_run_allowed.sender();
 
     loop {
@@ -51,11 +59,21 @@ pub async fn run(state: &'static SystemState) {
             (Some(soc), Some(true), Some(charger_state)) if soc > 5 && !charger_state.charging
         ));
 
-        select3(
+        let s = select4(
+            requests_receiver.changed(),
             soc_receiver.changed(),
             controller_connected_receiver.changed(),
             charger_state_receiver.changed(),
         )
         .await;
+
+        match s {
+            Either4::First(Request::Reboot) => {
+                warn!("Reboot request is received");
+                cortex_m::peripheral::SCB::sys_reset();
+            }
+
+            _ => {}
+        }
     }
 }

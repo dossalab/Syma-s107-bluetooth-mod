@@ -1,7 +1,7 @@
 use core::future;
 
 use crate::{
-    state::SystemState,
+    state::{Request, SystemState},
     types::{ChargerState, PeriodicUpdate},
     PowerResources, SharedI2cBus,
 };
@@ -11,9 +11,9 @@ use bq27xxx::{
     memory::MemoryBlock,
     Bq27xx, ChemId,
 };
-use defmt::{error, info};
+use defmt::{error, info, unwrap, warn};
 use embassy_embedded_hal::shared_bus::{asynch::i2c::I2cDevice, I2cDeviceError};
-use embassy_futures::select::{select, Either};
+use embassy_futures::select::{select, select3, Either, Either3};
 use embassy_nrf::{
     gpio::{Input, Pull},
     twim,
@@ -25,6 +25,8 @@ type Gauge<'a> = Bq27xx<I2cDevice<'a, NoopRawMutex, twim::Twim<'a>>, embassy_tim
 type GaugeResult<T> = Result<T, bq27xxx::ChipError<I2cDeviceError<twim::Error>>>;
 
 async fn wait_gauge_init_complete<'a>(gauge: &mut Gauge<'a>) -> GaugeResult<()> {
+    info!("waiting for fuelgauge init");
+
     for _ in 0..10 {
         let control_flags = gauge.get_control_status().await?;
 
@@ -84,7 +86,18 @@ async fn configure_gauge<'a>(gauge: &mut Gauge<'a>) -> GaugeResult<()> {
         .memory_modify(|b: &mut ChemInfo| {
             b.set_v_taper(4200); // mV
         })
-        .await
+        .await?;
+
+    // Read back the values to confirm
+    info!("state: {}", gauge.memblock_read::<StateClass>().await?);
+    info!(
+        "ratable: {}",
+        gauge.memblock_read::<RaTable>().await?.as_bytes()
+    );
+
+    info!("chem: {}", gauge.memblock_read::<ChemInfo>().await?);
+
+    Ok(())
 }
 
 #[embassy_executor::task]
@@ -96,6 +109,7 @@ pub async fn run(state: &'static SystemState, mut r: PowerResources, i2c: &'stat
     let soc_sender = state.soc.sender();
     let periodic_update_sender = state.periodic_update.sender();
     let charger_state_sender = state.charger_state.sender();
+    let mut requests_receiver = unwrap!(state.requests.receiver());
 
     let force_memory_update = false;
 
@@ -109,24 +123,6 @@ pub async fn run(state: &'static SystemState, mut r: PowerResources, i2c: &'stat
 
         gauge.probe().await?;
 
-        let flags = gauge.get_flags().await?;
-
-        if flags.contains(StatusFlags::ITPOR) || force_memory_update {
-            info!("fuelgauge ITPOR condition");
-
-            wait_gauge_init_complete(&mut gauge).await?;
-            configure_gauge(&mut gauge).await?;
-        } else {
-            // still dump the info for debugging
-            info!("state: {}", gauge.memblock_read::<StateClass>().await?);
-            info!(
-                "ratable: {}",
-                gauge.memblock_read::<RaTable>().await?.as_bytes()
-            );
-
-            info!("chem: {}", gauge.memblock_read::<ChemInfo>().await?);
-        }
-
         let next_periodic_update = async || match do_periodic {
             true => Timer::after(GAUGE_PERIODIC_POLL_INTERVAL).await,
             false => future::pending().await,
@@ -137,21 +133,45 @@ pub async fn run(state: &'static SystemState, mut r: PowerResources, i2c: &'stat
         soc_sender.send(gauge.state_of_charge().await? as u8);
 
         loop {
-            let r = select(int.wait_for_low(), next_periodic_update()).await;
-            match r {
-                Either::First(_) => {
+            let s = select3(
+                int.wait_for_low(),
+                next_periodic_update(),
+                requests_receiver.changed(),
+            )
+            .await;
+
+            match s {
+                Either3::First(_) => {
                     info!("fuelgauge interrupt");
                     soc_sender.send(gauge.state_of_charge().await? as u8);
                 }
-                Either::Second(_) => {
-                    info!("fuelgauge periodic update");
+                Either3::Second(_) => {
+                    let voltage = gauge.voltage().await?;
+                    let current = gauge.average_current().await?;
+                    let temperature = gauge.temperature().await?;
+                    let flags = gauge.get_flags().await?;
+
+                    info!("{} mV, {} mA - {}", voltage, current, flags);
+
+                    if flags.contains(StatusFlags::ITPOR) || force_memory_update {
+                        info!("fuelgauge ITPOR condition");
+
+                        wait_gauge_init_complete(&mut gauge).await?;
+                        configure_gauge(&mut gauge).await?;
+                    }
 
                     periodic_update_sender.send(PeriodicUpdate {
-                        voltage: gauge.voltage().await?,
-                        current: gauge.average_current().await?,
-                        temperature: gauge.temperature().await?,
+                        voltage,
+                        current,
+                        temperature,
                     });
                 }
+
+                Either3::Third(Request::FuelgaugeReset) => {
+                    warn!("resetting the fuel-gauge!");
+                    gauge.reset().await?;
+                }
+                Either3::Third(_) => {}
             }
         }
     };
@@ -176,7 +196,7 @@ pub async fn run(state: &'static SystemState, mut r: PowerResources, i2c: &'stat
 
         match select(poll_gauge(periodic_update), poll_charger()).await {
             Either::First(Err(e)) => {
-                error!("gauge initialization failure - {}", e);
+                error!("gauge communication failure - {}", e);
                 Timer::after(GAUGE_INIT_RETRY_INTERVAL).await
             }
 
