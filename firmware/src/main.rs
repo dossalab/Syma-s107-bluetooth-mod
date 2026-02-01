@@ -14,9 +14,8 @@ use embassy_nrf::{
     twim::{self, Twim},
     Peri,
 };
-use embassy_sync::{blocking_mutex::raw::NoopRawMutex, mutex::Mutex, signal::Signal};
+use embassy_sync::{blocking_mutex::raw::NoopRawMutex, mutex::Mutex};
 use git_version::git_version;
-use indications::LedIndicationsSignal;
 use nrf_softdevice::{raw, Softdevice};
 
 use defmt::{info, unwrap};
@@ -135,10 +134,8 @@ async fn main(spawner: Spawner) {
     static SYSTEM_STATE: StaticCell<SystemState> = StaticCell::new();
     let system_state = SYSTEM_STATE.init(SystemState::new());
 
-    static LED_INDICATIONS: LedIndicationsSignal = Signal::new();
-
-    spawner.spawn(unwrap!(indications::run(&LED_INDICATIONS, r.led_switch)));
-    spawner.spawn(unwrap!(ble::run(sd, system_state, &LED_INDICATIONS)));
+    spawner.spawn(unwrap!(indications::run(system_state, r.led_switch)));
+    spawner.spawn(unwrap!(ble::run(sd, system_state)));
     spawner.spawn(unwrap!(control::run(system_state, r.controller,)));
     spawner.spawn(unwrap!(power::run(system_state, r.power, i2c)));
     spawner.spawn(unwrap!(state::run(system_state)));

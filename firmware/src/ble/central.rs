@@ -11,10 +11,7 @@ use nrf_softdevice::{
 use scopeguard::guard;
 
 use crate::state::SystemState;
-use crate::{
-    indications::{IndicationStyle, LedIndicationsSignal},
-    xbox::{self, XboxHidServiceClientEvent},
-};
+use crate::xbox::{self, XboxHidServiceClientEvent};
 use crate::{types::ButtonFlags, xbox::XboxHidServiceClient};
 
 use super::errors::BleError;
@@ -44,7 +41,7 @@ impl SecurityHandler for Bonder {
 }
 
 // Scan for Xbox controllers
-async fn scan(sd: &Softdevice, indications: &'static LedIndicationsSignal) -> Option<Address> {
+async fn scan(sd: &Softdevice) -> Option<Address> {
     let config = central::ScanConfig {
         interval: 3200, // *0.625 us
         window: 160,    // *0.625us
@@ -54,8 +51,6 @@ async fn scan(sd: &Softdevice, indications: &'static LedIndicationsSignal) -> Op
     let timeout = Duration::from_secs(10);
 
     let do_scan = async || loop {
-        indications.signal(IndicationStyle::BlinkFast);
-
         let ret = central::scan(sd, &config, |params| unsafe {
             let payload = core::slice::from_raw_parts(params.data.p_data, params.data.len as usize);
 
@@ -96,15 +91,12 @@ async fn connect(
     sd: &Softdevice,
     addr: Address,
     bonder: &'static Bonder,
-    indications: &'static LedIndicationsSignal,
 ) -> Result<ble::Connection, BleError> {
     let whitelist = &[&addr];
     let mut config = central::ConnectConfig::default();
     config.scan_config.whitelist = Some(whitelist);
 
     info!("connecting to device.. {}", addr);
-
-    indications.signal(IndicationStyle::BlinkSlow);
 
     let conn = central::connect_with_security(sd, &config, bonder).await?;
     match conn.encrypt() {
@@ -128,11 +120,7 @@ async fn connect(
     Ok(conn)
 }
 
-async fn run_gatt(
-    conn: ble::Connection,
-    indications: &'static LedIndicationsSignal,
-    stats: &'static SystemState,
-) -> Result<(), BleError> {
+async fn run_gatt(conn: ble::Connection, stats: &'static SystemState) -> Result<(), BleError> {
     let controller_sample_sender = stats.controller_sample.sender();
     let client: XboxHidServiceClient = gatt_client::discover(&conn).await?;
 
@@ -147,8 +135,6 @@ async fn run_gatt(
     // info!("report map is {:x}", report_map);
 
     // All ready, we're connected
-    indications.signal(IndicationStyle::Disabled);
-
     gatt_client::run(&conn, &client, |event| match event {
         XboxHidServiceClientEvent::HidReportNotification(val) => {
             let jd = xbox::decode_hid_report(&val);
@@ -167,20 +153,19 @@ async fn run_gatt(
 
 pub async fn central_loop(
     sd: &'static Softdevice,
-    indications: &'static LedIndicationsSignal,
     state: &'static SystemState,
     bonder: &'static Bonder,
 ) {
     let controller_connected_sender = state.controller_connected.sender();
 
     let scan_connect = async || -> Result<(), BleError> {
-        if let Some(address) = scan(sd, indications).await {
-            let conn = connect(sd, address, bonder, indications).await?;
+        if let Some(address) = scan(sd).await {
+            let conn = connect(sd, address, bonder).await?;
 
             controller_connected_sender.send(true);
             let _g = guard((), |_| controller_connected_sender.send(false));
 
-            match run_gatt(conn, indications, state).await {
+            match run_gatt(conn, state).await {
                 Err(e) => error!("run gatt exited with error - {}", e),
                 _ => {}
             }
