@@ -2,6 +2,7 @@
 #![no_main]
 
 use assign_resources::assign_resources;
+use embassy_embedded_hal::shared_bus::asynch::i2c::I2cDevice;
 use state::SystemState;
 use static_cell::StaticCell;
 
@@ -33,6 +34,7 @@ mod xbox;
 use defmt_rtt as _;
 
 type SharedI2cBus = Mutex<NoopRawMutex, Twim<'static>>;
+type SharedI2cDevice<'a> = I2cDevice<'a, NoopRawMutex, Twim<'a>>;
 
 bind_interrupts!(struct Irqs {
     TWISPI0 => twim::InterruptHandler<peripherals::TWISPI0>;

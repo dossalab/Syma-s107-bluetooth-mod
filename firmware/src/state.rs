@@ -2,13 +2,14 @@ use defmt::{info, unwrap, warn};
 use embassy_futures::select::{select4, Either4};
 use embassy_sync::{
     blocking_mutex::raw::NoopRawMutex,
-    watch::{Receiver, Watch},
+    watch::{Receiver, Sender, Watch},
 };
 
 use crate::types::{ChargerState, JoystickData, PeriodicUpdate, PidParams};
 
 pub type StateWatch<T> = Watch<NoopRawMutex, T, 8>;
 pub type StateReceiver<'a, T> = Receiver<'a, NoopRawMutex, T, 8>;
+pub type StateSender<'a, T> = Sender<'a, NoopRawMutex, T, 8>;
 
 #[derive(Clone)]
 pub enum Request {
