@@ -5,18 +5,13 @@ use embassy_sync::{
     watch::{Receiver, Sender, Watch},
 };
 
-use crate::types::{ChargerState, JoystickData, PeriodicUpdate, PidParams};
+use crate::types::{
+    ChargerState, JoystickData, OcvMeasurement, PeriodicUpdate, QmaxUpdate, Request,
+};
 
 pub type StateWatch<T> = Watch<NoopRawMutex, T, 8>;
 pub type StateReceiver<'a, T> = Receiver<'a, NoopRawMutex, T, 8>;
 pub type StateSender<'a, T> = Sender<'a, NoopRawMutex, T, 8>;
-
-#[derive(Clone)]
-pub enum Request {
-    PidUpdate(PidParams),
-    Reboot,
-    FuelgaugeReset,
-}
 
 pub struct SystemState {
     pub charger_state: StateWatch<ChargerState>,
@@ -26,6 +21,8 @@ pub struct SystemState {
     pub controller_sample: StateWatch<JoystickData>,
     pub requests: StateWatch<Request>,
     pub controller_run_allowed: StateWatch<bool>,
+    pub qmax_update: StateWatch<QmaxUpdate>,
+    pub ocv_measurement: StateWatch<OcvMeasurement>,
 }
 
 impl<'a> SystemState {
@@ -38,6 +35,8 @@ impl<'a> SystemState {
             controller_sample: Watch::new(),
             requests: Watch::new(),
             controller_run_allowed: Watch::new_with(false),
+            qmax_update: Watch::new(),
+            ocv_measurement: Watch::new(),
         }
     }
 }

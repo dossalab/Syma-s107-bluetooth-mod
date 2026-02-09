@@ -1,6 +1,6 @@
 use crate::{
-    state::{Request, StateReceiver, StateSender, SystemState},
-    types::{ChargerState, PeriodicUpdate},
+    state::{StateReceiver, StateSender, SystemState},
+    types::{ChargerState, OcvMeasurement, PeriodicUpdate, QmaxUpdate, Request},
     PowerResources, SharedI2cBus, SharedI2cDevice,
 };
 use bq27xxx::{
@@ -39,17 +39,17 @@ struct Gauge<'a> {
     int: Input<'a>,
 
     state: GaugeState,
-    periodic_refresh: bool,
+    high_speed_refresh: bool,
 
     // State receivers and senders
     controller_connected_receiver: StateReceiver<'a, bool>,
     soc_sender: StateSender<'a, u8>,
     periodic_update_sender: StateSender<'a, PeriodicUpdate>,
     requests_receiver: StateReceiver<'a, Request>,
+    ocv_taken_sender: StateSender<'a, OcvMeasurement>,
+    qmax_update_sender: StateSender<'a, QmaxUpdate>,
 
     // Flags tracker
-    last_ocvtaken: Option<Instant>,
-    last_qmax_update: Option<Instant>,
     prev_flags: (StatusFlags, ControlStatusFlags),
 }
 
@@ -116,33 +116,29 @@ impl<'a> Gauge<'a> {
         Ok(())
     }
 
-    fn track_flags(&mut self, flags: StatusFlags, control: ControlStatusFlags) {
-        let new_flags = flags.difference(self.prev_flags.0);
-        let new_control = control.difference(self.prev_flags.1);
+    async fn track_flags(&mut self) -> GaugeResult<(StatusFlags, ControlStatusFlags)> {
+        let flags = self.gauge.get_flags().await?;
+        let control = self.gauge.get_control_status().await?;
 
-        if new_flags.contains(StatusFlags::OCVTAKEN) {
-            self.last_ocvtaken = Some(Instant::now());
-        }
-
-        if new_control.contains(ControlStatusFlags::QMAX_UP) {
-            self.last_qmax_update = Some(Instant::now());
-        }
+        let new_flags = flags - self.prev_flags.0;
+        let new_control = control - self.prev_flags.1;
 
         self.prev_flags = (flags, control);
+
+        Ok((new_flags, new_control))
     }
 
     async fn refresh(&mut self, wakeup_reason: GaugeRefreshReason) -> GaugeResult<()> {
-        // try get the status flags first, no matter in which state we're in
-        let flags = self.gauge.get_flags().await?;
-        let control_flags = self.gauge.get_control_status().await?;
+        let (flags, control_flags) = self.track_flags().await?;
 
-        info!("flags: {}, control {}", flags, control_flags);
-        self.track_flags(flags, control_flags);
+        if !flags.is_empty() || !control_flags.is_empty() {
+            info!("flags: {}, control {}", flags, control_flags);
+        }
 
         match self.state {
             GaugeState::Initializing => {
                 if control_flags.contains(ControlStatusFlags::INITCOMP) {
-                    info!("gauge init complete");
+                    info!("init complete");
 
                     // Now we can try to configure the gauge
                     self.configure_gauge().await?;
@@ -153,11 +149,36 @@ impl<'a> Gauge<'a> {
             GaugeState::Idle => {
                 // let's check if we're coming out of reset...
                 if flags.contains(StatusFlags::ITPOR) {
-                    info!("gauge power on reset detected");
+                    info!("power on reset detected");
                     self.state = GaugeState::Initializing;
 
                     // There is no point to talk to the gauge at this stage
                     return Ok(());
+                }
+
+                if flags.contains(StatusFlags::OCVTAKEN) {
+                    info!("OCV measurement taken");
+                    self.ocv_taken_sender.send(OcvMeasurement {
+                        timestamp: Instant::now().into(),
+                    });
+                }
+
+                if control_flags.contains(ControlStatusFlags::QMAX_UP) {
+                    // Let's also read and report the current QMax value
+                    let state = self.gauge.memblock_read::<StateClass>().await?;
+
+                    info!("QMax updated (new value {})", state.get_qmax());
+                    self.qmax_update_sender.send(QmaxUpdate {
+                        value: state.get_qmax(),
+                        timestamp: Instant::now().into(),
+                    });
+                }
+
+                if !self.soc_sender.contains_value() {
+                    let soc = self.gauge.state_of_charge().await?;
+
+                    info!("initial soc level - {}%", soc);
+                    self.soc_sender.send(soc as u8);
                 }
 
                 match wakeup_reason {
@@ -170,7 +191,10 @@ impl<'a> Gauge<'a> {
                         let current = self.gauge.average_current().await?;
                         let temperature = self.gauge.temperature().await?;
 
-                        info!("periodic - {} mV, {} mA - {}", voltage, current, flags);
+                        info!(
+                            "periodic - {} mV, {} mA, {} .K",
+                            voltage, current, temperature
+                        );
 
                         self.periodic_update_sender.send(PeriodicUpdate {
                             voltage,
@@ -195,10 +219,10 @@ impl<'a> Gauge<'a> {
     async fn run(&mut self) -> ! {
         loop {
             let periodic_refresh = async || {
-                if self.periodic_refresh {
+                if self.high_speed_refresh {
                     Timer::after_secs(1).await
                 } else {
-                    futures::future::pending().await
+                    Timer::after_secs(30).await
                 }
             };
 
@@ -224,9 +248,9 @@ impl<'a> Gauge<'a> {
                 }
 
                 Either4::Fourth(connected) => {
-                    self.periodic_refresh = connected;
+                    self.high_speed_refresh = connected;
 
-                    info!("periodic refresh: {}", self.periodic_refresh);
+                    info!("periodic refresh: {}", self.high_speed_refresh);
                     Ok(())
                 }
 
@@ -245,15 +269,15 @@ impl<'a> Gauge<'a> {
             int,
 
             state: GaugeState::Idle,
-            periodic_refresh: false,
+            high_speed_refresh: false,
 
             soc_sender: ss.soc.sender(),
             periodic_update_sender: ss.periodic_update.sender(),
             requests_receiver: unwrap!(ss.requests.receiver()),
             controller_connected_receiver: unwrap!(ss.controller_connected.receiver()),
+            ocv_taken_sender: ss.ocv_measurement.sender(),
+            qmax_update_sender: ss.qmax_update.sender(),
 
-            last_ocvtaken: None,
-            last_qmax_update: None,
             prev_flags: (StatusFlags::empty(), ControlStatusFlags::empty()),
         }
     }

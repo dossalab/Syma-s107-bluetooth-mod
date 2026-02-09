@@ -9,8 +9,8 @@ use embassy_time::{Duration, Ticker, Timer};
 use pid::Pid;
 
 use crate::{
-    state::{Request, SystemState},
-    types::JoystickData,
+    state::SystemState,
+    types::{JoystickData, Request},
     utils, ControllerResources, Irqs,
 };
 
