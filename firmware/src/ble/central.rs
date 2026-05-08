@@ -1,4 +1,4 @@
-use defmt::{debug, error, info, warn};
+use defmt::{debug, error, info, unwrap, warn};
 use embassy_futures::select::{select, Either};
 use embassy_time::{Duration, Timer};
 use nrf_softdevice::{
@@ -11,6 +11,7 @@ use nrf_softdevice::{
 use scopeguard::guard;
 
 use crate::state::SystemState;
+use crate::types::Request;
 use crate::xbox::XboxHidServiceClient;
 use crate::xbox::{self, XboxHidServiceClientEvent};
 
@@ -48,7 +49,7 @@ async fn scan(sd: &Softdevice) -> Option<Address> {
         ..central::ScanConfig::default()
     };
 
-    let timeout = Duration::from_secs(10);
+    let timeout = Duration::from_secs(60);
 
     let do_scan = async || loop {
         let ret = central::scan(sd, &config, |params| unsafe {
@@ -152,26 +153,37 @@ pub async fn central_loop(
     bonder: &'static Bonder,
 ) {
     let controller_connected_sender = state.controller_connected.sender();
+    let mut requests_receiver = unwrap!(state.requests.receiver());
 
-    let scan_connect = async || -> Result<(), BleError> {
-        if let Some(address) = scan(sd).await {
-            let conn = connect(sd, address, bonder).await?;
-
-            controller_connected_sender.send(true);
-            let _g = guard((), |_| controller_connected_sender.send(false));
-
-            match run_gatt(conn, state).await {
-                Err(e) => error!("run gatt exited with error - {}", e),
-                _ => {}
+    loop {
+        // Wait for a StartScan request before doing anything
+        loop {
+            if matches!(requests_receiver.changed().await, Request::StartScan) {
+                break;
             }
         }
 
-        Ok(())
-    };
+        info!("StartScan request received, scanning...");
 
-    loop {
-        if let Err(e) = scan_connect().await {
-            error!("search loop error - {}", e)
+        let result: Result<(), BleError> = async {
+            if let Some(address) = scan(sd).await {
+                let conn = connect(sd, address, bonder).await?;
+
+                controller_connected_sender.send(true);
+                let _g = guard((), |_| controller_connected_sender.send(false));
+
+                match run_gatt(conn, state).await {
+                    Err(e) => error!("run gatt exited with error - {}", e),
+                    _ => {}
+                }
+            }
+
+            Ok(())
+        }
+        .await;
+
+        if let Err(e) = result {
+            error!("scan/connect error - {}", e);
         }
     }
 }

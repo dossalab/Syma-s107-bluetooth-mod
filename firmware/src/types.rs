@@ -59,6 +59,7 @@ pub enum Request {
     PidUpdate(PidParams),
     Reboot,
     FuelgaugeReset,
+    StartScan,
 }
 
 #[repr(C, packed)]

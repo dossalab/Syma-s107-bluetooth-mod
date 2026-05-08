@@ -95,6 +95,7 @@ fn hw_init() -> (AssignedResources, &'static mut Softdevice) {
     interrupt::SAADC.set_priority(interrupt::Priority::P2);
 
     let sd_config = nrf_softdevice::Config {
+        common_vs_uuid: Some(raw::ble_common_cfg_vs_uuid_t { vs_uuid_count: 15 }),
         conn_gap: Some(raw::ble_gap_conn_cfg_t {
             conn_count: 2,
             event_length: 24,

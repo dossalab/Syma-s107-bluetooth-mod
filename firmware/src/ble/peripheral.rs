@@ -60,6 +60,9 @@ pub struct RequestsService {
 
     #[characteristic(uuid = "38924a07-23d7-43fe-af5d-9c887b389cf1", write)]
     fuelgauge_reset: bool,
+
+    #[characteristic(uuid = "38924a07-23d7-43fe-af5d-9c887b489cf1", write)]
+    start_scan: bool,
 }
 
 #[nrf_softdevice::gatt_server]
@@ -82,6 +85,7 @@ async fn run_gatt(
             RequestsServiceEvent::RebootWrite(true) => Request::Reboot,
             RequestsServiceEvent::PidUpdateWrite(pid) => Request::PidUpdate(pid),
             RequestsServiceEvent::FuelgaugeResetWrite(true) => Request::FuelgaugeReset,
+            RequestsServiceEvent::StartScanWrite(true) => Request::StartScan,
 
             _ => return,
         };
