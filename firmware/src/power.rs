@@ -9,7 +9,7 @@ use bq27xxx::{
     memory::MemoryBlock,
     Bq27xx, ChemId,
 };
-use defmt::{error, info, unwrap};
+use defmt::{debug, error, info, unwrap};
 use embassy_embedded_hal::shared_bus::{asynch::i2c::I2cDevice, I2cDeviceError};
 use embassy_futures::{
     join::join,
@@ -26,11 +26,10 @@ type GaugeResult<T> = Result<T, bq27xxx::ChipError<I2cDeviceError<twim::Error>>>
 enum GaugeRefreshReason {
     Periodic,
     Interrupt,
-    Reset,
 }
 
 enum GaugeState {
-    Initializing,
+    Initializing { from_reset: bool },
     Idle,
 }
 
@@ -136,21 +135,35 @@ impl<'a> Gauge<'a> {
         }
 
         match self.state {
-            GaugeState::Initializing => {
-                if control_flags.contains(ControlStatusFlags::INITCOMP) {
-                    info!("init complete");
+            GaugeState::Initializing { ref mut from_reset } => {
+                debug!("initialization state");
 
-                    // Now we can try to configure the gauge
-                    self.configure_gauge().await?;
+                if flags.contains(StatusFlags::ITPOR) {
+                    *from_reset = true;
+                }
+
+                if control_flags.contains(ControlStatusFlags::INITCOMP) {
+                    if *from_reset {
+                        info!("init complete, configuring gauge");
+                        self.configure_gauge().await?;
+                    } else {
+                        info!("init complete, gauge was already running");
+                    }
                     self.state = GaugeState::Idle;
+
+                    let soc = self.gauge.state_of_charge().await?;
+                    info!("initial soc - {}%", soc);
+                    self.soc_sender.send(soc as u8);
                 }
             }
 
             GaugeState::Idle => {
+                debug!("idle state");
+
                 // let's check if we're coming out of reset...
                 if flags.contains(StatusFlags::ITPOR) {
                     info!("power on reset detected");
-                    self.state = GaugeState::Initializing;
+                    self.state = GaugeState::Initializing { from_reset: true };
 
                     // There is no point to talk to the gauge at this stage
                     return Ok(());
@@ -174,18 +187,7 @@ impl<'a> Gauge<'a> {
                     });
                 }
 
-                if !self.soc_sender.contains_value() {
-                    let soc = self.gauge.state_of_charge().await?;
-
-                    info!("initial soc level - {}%", soc);
-                    self.soc_sender.send(soc as u8);
-                }
-
                 match wakeup_reason {
-                    GaugeRefreshReason::Reset => {
-                        // Do nothing, we already got the needed flags and other stuff
-                    }
-
                     GaugeRefreshReason::Periodic => {
                         let voltage = self.gauge.voltage().await?;
                         let current = self.gauge.average_current().await?;
@@ -217,6 +219,10 @@ impl<'a> Gauge<'a> {
     }
 
     async fn run(&mut self) -> ! {
+        if let Err(err) = self.refresh(GaugeRefreshReason::Periodic).await {
+            error!("error - {}", err);
+        }
+
         loop {
             let periodic_refresh = async || {
                 if self.high_speed_refresh {
@@ -242,7 +248,8 @@ impl<'a> Gauge<'a> {
                     info!("performing gauge reset");
 
                     let r1 = self.gauge.reset().await;
-                    let r2 = self.refresh(GaugeRefreshReason::Reset).await;
+                    self.state = GaugeState::Initializing { from_reset: true };
+                    let r2 = self.refresh(GaugeRefreshReason::Periodic).await;
 
                     r1.and(r2)
                 }
@@ -268,7 +275,7 @@ impl<'a> Gauge<'a> {
             gauge: Bq27xx::new(i2c_dev, embassy_time::Delay, Self::GAUGE_I2C_ADDR),
             int,
 
-            state: GaugeState::Idle,
+            state: GaugeState::Initializing { from_reset: false },
             high_speed_refresh: false,
 
             soc_sender: ss.soc.sender(),
