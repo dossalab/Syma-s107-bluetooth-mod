@@ -133,13 +133,8 @@ async fn run_notifications(
         server.telemetry.charger_state_set(&charger_state)?;
     }
 
-    if let Some(qmax_update) = qmax_update_receiver.try_get() {
-        server.telemetry.qmax_update_set(&qmax_update)?;
-    }
-
-    if let Some(ocv_measurement) = ocv_measurement_receiver.try_get() {
-        server.telemetry.ocv_measurement_set(&ocv_measurement)?;
-    }
+    server.telemetry.qmax_update_set(&qmax_update_receiver.try_get().unwrap_or_default())?;
+    server.telemetry.ocv_measurement_set(&ocv_measurement_receiver.try_get().unwrap_or_default())?;
 
     loop {
         let r = select5(

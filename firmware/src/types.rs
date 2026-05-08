@@ -63,14 +63,14 @@ pub enum Request {
 }
 
 #[repr(C, packed)]
-#[derive(Copy, Clone)]
+#[derive(Default, Copy, Clone)]
 pub struct QmaxUpdate {
     pub timestamp: SecInstant,
     pub value: u16,
 }
 
 #[repr(C, packed)]
-#[derive(Copy, Clone)]
+#[derive(Default, Copy, Clone)]
 pub struct OcvMeasurement {
     pub timestamp: SecInstant,
 }
