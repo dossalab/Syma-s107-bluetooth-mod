@@ -123,9 +123,7 @@ async fn run_notifications(
     let mut qmax_update_receiver = unwrap!(state.qmax_update.receiver());
     let mut ocv_measurement_receiver = unwrap!(state.ocv_measurement.receiver());
 
-    if let Some(soc) = soc_receiver.try_get() {
-        server.bas.battery_level_set(&soc)?;
-    }
+    server.bas.battery_level_set(&soc_receiver.try_get().unwrap_or(0))?;
 
     if let Some(charger_state) = charger_state_receiver.try_get() {
         server.telemetry.charger_state_set(&charger_state)?;
@@ -186,6 +184,11 @@ pub async fn peripheral_loop(sd: &Softdevice, ps: &'static SystemState, server: 
     loop {
         match peripheral::advertise_connectable(sd, adv, &config).await {
             Ok(conn) => {
+                if let Err(e) = gatt_server::set_sys_attrs(&conn, None) {
+                    error!("set_sys_attrs failed - {}", e);
+                    continue;
+                }
+
                 let r = select(
                     run_gatt(&server, &conn, ps),
                     run_notifications(ps, &conn, &server),
