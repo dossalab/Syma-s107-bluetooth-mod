@@ -29,6 +29,7 @@ async fn run_gatt(
         let request = match e {
             RequestsServiceEvent::RebootWrite(true) => Request::Reboot,
             RequestsServiceEvent::PidUpdateWrite(pid) => Request::PidUpdate(pid),
+            RequestsServiceEvent::ControlUpdateWrite(params) => Request::ControlUpdate(params),
             RequestsServiceEvent::FuelgaugeResetWrite(true) => Request::FuelgaugeReset,
             RequestsServiceEvent::ScanStateWrite(true) => Request::StartScan,
 

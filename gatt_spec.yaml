@@ -31,6 +31,11 @@ types:
       - name: d
         ty: f32
 
+  - name: ControlParams
+    fields:
+      - name: yaw_expo
+        ty: f32
+
   - name: QmaxUpdate
     fields:
       - name: timestamp
@@ -103,6 +108,10 @@ services:
         uuid: 38924a07-23d7-43fe-af5d-9c887b489cf1
         ty: bool
         permissions: [read, write, notify]
+      - field: control_update
+        uuid: 38924a07-23d7-43fe-af5d-9c887b589cf1
+        ty: ControlParams
+        permissions: [write]
 
   - name: BatteryService
     field: bas

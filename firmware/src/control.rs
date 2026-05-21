@@ -9,9 +9,10 @@ use embassy_time::{Duration, Ticker, Timer};
 use pid::Pid;
 
 use crate::{
+    ble::types::ControlParams,
     state::SystemState,
     types::{JoystickData, Request},
-    utils, ControllerResources, Irqs,
+    utils, xbox, ControllerResources, Irqs,
 };
 
 struct Controller<'a> {
@@ -22,12 +23,28 @@ struct Controller<'a> {
     pid: Pid<f32>,
     input: JoystickData,
     gyro_offset: i32,
+    yaw_expo: f32,
+}
+
+/// Applies an expo (exponential) curve to a joystick axis value.
+///
+/// `expo` in [0.0, 1.0]: 0 = fully linear, 1 = fully cubic.
+/// The curve blends linear and cubic response, which softens sensitivity
+/// near center while preserving full deflection at the edges.
+fn apply_expo(value: i32, max: i32, expo: f32) -> i32 {
+    let n = value as f32 / max as f32;
+    let curved = n * ((1.0 - expo) + expo * n * n);
+    (curved * max as f32) as i32
 }
 
 impl<'a> Controller<'a> {
     const PWM_MAX_DUTY: u16 = 512;
     const PID_CONTROL_LIMIT: u16 = Self::PWM_MAX_DUTY / 2;
     const RECEIVE_TIMEOUT: Duration = Duration::from_secs(1);
+    /// Max yaw axis value after the >> 6 shift applied in tick().
+    const YAW_STICK_MAX: i32 = xbox::STICKS_RANGE / 2 >> 6;
+    /// Default expo curve strength for yaw (rudder). 0.0 = linear, 1.0 = full cubic.
+    const YAW_EXPO_DEFAULT: f32 = 0.6;
 
     fn set_pwm(&mut self, r1: i32, r2: i32, v: i32) {
         let clamp_to_pwm = |x: i32| x.clamp(0, Self::PWM_MAX_DUTY as i32) as u16;
@@ -66,7 +83,8 @@ impl<'a> Controller<'a> {
 
     async fn tick(&mut self) {
         let throttle = (self.input.j1.1 >> 6).max(0);
-        let yaw = self.input.j2.0 >> 6;
+        let yaw_raw = self.input.j2.0 >> 6;
+        let yaw = apply_expo(yaw_raw, Self::YAW_STICK_MAX, self.yaw_expo);
 
         let control = if throttle > 10 {
             let ang_rate = self.read_angular_speed().await;
@@ -93,6 +111,12 @@ impl<'a> Controller<'a> {
             .p(p, Self::PID_CONTROL_LIMIT)
             .i(i, Self::PID_CONTROL_LIMIT)
             .d(d, Self::PID_CONTROL_LIMIT);
+    }
+
+    fn set_control_params(&mut self, params: ControlParams) {
+        let yaw_expo = params.yaw_expo;
+        info!("updating control params: yaw_expo: {}", yaw_expo);
+        self.yaw_expo = yaw_expo.clamp(0.0, 1.0);
     }
 
     async fn init(r: &'a mut ControllerResources) -> Self {
@@ -150,6 +174,7 @@ impl<'a> Controller<'a> {
             pid,
             input: Default::default(),
             gyro_offset: 742,
+            yaw_expo: Self::YAW_EXPO_DEFAULT,
         }
     }
 }
@@ -182,6 +207,10 @@ pub async fn run(state: &'static SystemState, mut r: ControllerResources) {
 
                     info!("updating pid params: p: {}, i: {}, d: {}", p, i, d);
                     controller.set_pid(p, i, d);
+                }
+
+                Either3::First(Request::ControlUpdate(params)) => {
+                    controller.set_control_params(params);
                 }
 
                 Either3::First(_) => {}
