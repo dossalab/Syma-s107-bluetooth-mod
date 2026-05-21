@@ -2,14 +2,15 @@ use central::{central_loop, Bonder};
 use defmt::unwrap;
 use embassy_futures::join::join3;
 use nrf_softdevice::Softdevice;
-use peripheral::{peripheral_loop, GattServer};
+use peripheral::peripheral_loop;
 use static_cell::StaticCell;
 
-use crate::state::SystemState;
+use crate::{ble::types::GattServer, state::SystemState};
 
 mod central;
 mod errors;
 mod peripheral;
+pub(crate) mod types;
 
 #[embassy_executor::task]
 pub async fn run(sd: &'static mut Softdevice, state: &'static SystemState) {

@@ -178,7 +178,7 @@ pub async fn run(state: &'static SystemState, mut r: ControllerResources) {
 
             match r {
                 Either3::First(Request::PidUpdate(pid)) => {
-                    let (p, i, d) = (pid.get_p(), pid.get_i(), pid.get_d());
+                    let (p, i, d) = (pid.p, pid.i, pid.d);
 
                     info!("updating pid params: p: {}, i: {}, d: {}", p, i, d);
                     controller.set_pid(p, i, d);

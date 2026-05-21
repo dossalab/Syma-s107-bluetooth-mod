@@ -72,3 +72,6 @@ features = [ "time-driver-rtc1", "gpiote", "unstable-pac" ]
 
 [dependencies.embassy-sync]
 git = "https://github.com/embassy-rs/embassy"
+
+[build-dependencies]
+gatt-codegen = { path = "../../gatt-codegen-rs", features = ["nrf_softdevice"] }

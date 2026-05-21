@@ -1,58 +1,6 @@
-// Use simple C-style packing to help with BLE serialization
-
 use defmt::bitflags;
-use embassy_time::Instant;
 
-#[derive(Default, Copy, Clone)]
-pub struct SecInstant {
-    pub sec: u32,
-}
-
-impl From<Instant> for SecInstant {
-    fn from(value: Instant) -> Self {
-        Self {
-            sec: value.as_secs() as u32,
-        }
-    }
-}
-
-#[repr(C, packed)]
-#[derive(Default, Copy, Clone)]
-pub struct PeriodicUpdate {
-    pub voltage: u16,
-    pub current: i16,
-    pub temperature: u16,
-}
-
-#[repr(C, packed)]
-#[derive(Default, Copy, Clone)]
-pub struct ChargerState {
-    pub charging: bool,
-    pub failure: bool,
-}
-
-#[repr(C, packed)]
-#[derive(Default, Copy, Clone)]
-pub struct PidParams {
-    // let's use fixed point format to not waste space
-    pub unscaled_p: u16,
-    pub unscaled_i: u16,
-    pub unscaled_d: u16,
-}
-
-impl PidParams {
-    pub fn get_p(&self) -> f32 {
-        return self.unscaled_p as f32 / 100.0;
-    }
-
-    pub fn get_i(&self) -> f32 {
-        return self.unscaled_i as f32 / 100.0;
-    }
-
-    pub fn get_d(&self) -> f32 {
-        return self.unscaled_d as f32 / 100.0;
-    }
-}
+use crate::ble::types::PidParams;
 
 #[derive(Clone)]
 pub enum Request {
@@ -60,19 +8,6 @@ pub enum Request {
     Reboot,
     FuelgaugeReset,
     StartScan,
-}
-
-#[repr(C, packed)]
-#[derive(Default, Copy, Clone)]
-pub struct QmaxUpdate {
-    pub timestamp: SecInstant,
-    pub value: u16,
-}
-
-#[repr(C, packed)]
-#[derive(Default, Copy, Clone)]
-pub struct OcvMeasurement {
-    pub timestamp: SecInstant,
 }
 
 bitflags! {

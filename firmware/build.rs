@@ -21,6 +21,10 @@ fn main() {
         .unwrap()
         .write_all(include_bytes!("memory.x"))
         .unwrap();
+
+    // Generate BLE proto
+    gatt_codegen::nrf_softdevice::build("../gatt_spec.yaml", "gatt_generated.rs");
+
     println!("cargo:rustc-link-search={}", out.display());
 
     // By default, Cargo will re-run a build script whenever

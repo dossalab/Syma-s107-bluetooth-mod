@@ -1,6 +1,7 @@
 use crate::{
+    ble::types::{ChargerState, OcvMeasurement, PeriodicUpdate, QmaxUpdate},
     state::{StateReceiver, StateSender, SystemState},
-    types::{ChargerState, OcvMeasurement, PeriodicUpdate, QmaxUpdate, Request},
+    types::Request,
     PowerResources, SharedI2cBus, SharedI2cDevice,
 };
 use bq27xxx::{

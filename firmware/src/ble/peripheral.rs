@@ -1,76 +1,21 @@
+use crate::ble::types::{
+    GattServer, GattServerEvent, RequestsServiceEvent, SecInstant, TELEMETRY_SERVICE_UUID,
+};
 use defmt::{error, info, unwrap, warn};
 use embassy_futures::select::{select, select5, Either, Either5};
 use embassy_time::{Duration, Instant, Ticker, Timer};
 use nrf_softdevice::ble::advertisement_builder::{
     Flag, LegacyAdvertisementBuilder, LegacyAdvertisementPayload, ServiceList,
 };
-use nrf_softdevice::ble::{gatt_server, peripheral, Connection, Primitive};
+use nrf_softdevice::ble::{gatt_server, peripheral, Connection};
 use nrf_softdevice::Softdevice;
 
-use crate::state::SystemState;
-use crate::types::{
-    ChargerState, OcvMeasurement, PeriodicUpdate, PidParams, QmaxUpdate, Request, SecInstant,
-};
-
 use super::errors::BleError;
-
-#[nrf_softdevice::gatt_service(uuid = "180f")]
-pub struct BatteryService {
-    #[characteristic(uuid = "2a19", read, notify)]
-    battery_level: u8,
-}
-
-unsafe impl Primitive for PeriodicUpdate {}
-unsafe impl Primitive for ChargerState {}
-unsafe impl Primitive for PidParams {}
-unsafe impl Primitive for QmaxUpdate {}
-unsafe impl Primitive for OcvMeasurement {}
-unsafe impl Primitive for SecInstant {}
+use crate::state::SystemState;
+use crate::types::Request;
 
 // Help clients find us by using that uuid
-const TELEMETRY_SERVICE_UUID_BYTES: [u8; 16] =
-    0x38924a07_23d7_43fe_af5d_9c887a089cf1_u128.to_le_bytes();
-
-// bas is too limited to share everything we have
-#[nrf_softdevice::gatt_service(uuid = "38924a07-23d7-43fe-af5d-9c887a089cf1")]
-pub struct TelemetryService {
-    #[characteristic(uuid = "38924a07-23d7-43fe-af5d-9c887a189cf1", read, notify)]
-    charger_state: ChargerState,
-
-    #[characteristic(uuid = "38924a07-23d7-43fe-af5d-9c887a289cf1", notify)]
-    periodic_update: PeriodicUpdate,
-
-    #[characteristic(uuid = "38924a07-23d7-43fe-af5d-9c887a389cf1", read, notify)]
-    qmax_update: QmaxUpdate,
-
-    #[characteristic(uuid = "38924a07-23d7-43fe-af5d-9c887a489cf1", read, notify)]
-    ocv_measurement: OcvMeasurement,
-
-    #[characteristic(uuid = "38924a07-23d7-43fe-af5d-9c887a589cf1", read, notify)]
-    time: SecInstant,
-}
-
-#[nrf_softdevice::gatt_service(uuid = "38924a07-23d7-43fe-af5d-9c887b089cf1")]
-pub struct RequestsService {
-    #[characteristic(uuid = "38924a07-23d7-43fe-af5d-9c887b189cf1", write)]
-    reboot: bool,
-
-    #[characteristic(uuid = "38924a07-23d7-43fe-af5d-9c887b289cf1", write)]
-    pid_update: PidParams,
-
-    #[characteristic(uuid = "38924a07-23d7-43fe-af5d-9c887b389cf1", write)]
-    fuelgauge_reset: bool,
-
-    #[characteristic(uuid = "38924a07-23d7-43fe-af5d-9c887b489cf1", write)]
-    start_scan: bool,
-}
-
-#[nrf_softdevice::gatt_server]
-pub struct GattServer {
-    bas: BatteryService,
-    telemetry: TelemetryService,
-    requests: RequestsService,
-}
+const TELEMETRY_SERVICE_UUID_BYTES: [u8; 16] = TELEMETRY_SERVICE_UUID.to_le_bytes();
 
 async fn run_gatt(
     server: &GattServer,
@@ -127,14 +72,20 @@ async fn run_notifications(
     let mut qmax_update_receiver = unwrap!(state.qmax_update.receiver());
     let mut ocv_measurement_receiver = unwrap!(state.ocv_measurement.receiver());
 
-    server.bas.battery_level_set(&soc_receiver.try_get().unwrap_or(0))?;
+    server
+        .bas
+        .battery_level_set(&soc_receiver.try_get().unwrap_or(0))?;
 
     if let Some(charger_state) = charger_state_receiver.try_get() {
         server.telemetry.charger_state_set(&charger_state)?;
     }
 
-    server.telemetry.qmax_update_set(&qmax_update_receiver.try_get().unwrap_or_default())?;
-    server.telemetry.ocv_measurement_set(&ocv_measurement_receiver.try_get().unwrap_or_default())?;
+    server
+        .telemetry
+        .qmax_update_set(&qmax_update_receiver.try_get().unwrap_or_default())?;
+    server
+        .telemetry
+        .ocv_measurement_set(&ocv_measurement_receiver.try_get().unwrap_or_default())?;
 
     loop {
         let r = select5(

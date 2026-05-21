@@ -1,12 +1,12 @@
+use crate::{
+    ble::types::{ChargerState, OcvMeasurement, PeriodicUpdate, QmaxUpdate},
+    types::{JoystickData, Request},
+};
 use defmt::{info, unwrap, warn};
 use embassy_futures::select::{select4, Either4};
 use embassy_sync::{
     blocking_mutex::raw::NoopRawMutex,
     watch::{Receiver, Sender, Watch},
-};
-
-use crate::types::{
-    ChargerState, JoystickData, OcvMeasurement, PeriodicUpdate, QmaxUpdate, Request,
 };
 
 pub type StateWatch<T> = Watch<NoopRawMutex, T, 8>;
