@@ -1,8 +1,8 @@
 use crate::ble::types::{
-    GattServer, GattServerEvent, RequestsServiceEvent, SecInstant, TELEMETRY_SERVICE_UUID,
+    GattServer, GattServerEvent, RequestsServiceEvent, TELEMETRY_SERVICE_UUID,
 };
-use defmt::{error, info, unwrap, warn};
-use embassy_futures::select::{select, select5, Either, Either5};
+use defmt::{error, info, unwrap};
+use embassy_futures::select::{select, Either};
 use embassy_time::{Duration, Instant, Ticker, Timer};
 use nrf_softdevice::ble::advertisement_builder::{
     Flag, LegacyAdvertisementBuilder, LegacyAdvertisementPayload, ServiceList,
@@ -11,7 +11,7 @@ use nrf_softdevice::ble::{gatt_server, peripheral, Connection};
 use nrf_softdevice::Softdevice;
 
 use super::errors::BleError;
-use crate::state::SystemState;
+use crate::state::{StateReceiver, SystemState};
 use crate::types::Request;
 
 // Help clients find us by using that uuid
@@ -30,7 +30,7 @@ async fn run_gatt(
             RequestsServiceEvent::RebootWrite(true) => Request::Reboot,
             RequestsServiceEvent::PidUpdateWrite(pid) => Request::PidUpdate(pid),
             RequestsServiceEvent::FuelgaugeResetWrite(true) => Request::FuelgaugeReset,
-            RequestsServiceEvent::StartScanWrite(true) => Request::StartScan,
+            RequestsServiceEvent::ScanStateWrite(true) => Request::StartScan,
 
             _ => return,
         };
@@ -61,54 +61,51 @@ async fn run_gatt(
     }
 }
 
-async fn run_notifications(
-    state: &SystemState,
-    conn: &Connection,
-    server: &GattServer,
-) -> Result<(), BleError> {
-    let mut soc_receiver = unwrap!(state.soc.receiver());
-    let mut charger_state_receiver = unwrap!(state.charger_state.receiver());
-    let mut periodic_update_receiver = unwrap!(state.periodic_update.receiver());
-    let mut qmax_update_receiver = unwrap!(state.qmax_update.receiver());
-    let mut ocv_measurement_receiver = unwrap!(state.ocv_measurement.receiver());
-
-    server
-        .bas
-        .battery_level_set(&soc_receiver.try_get().unwrap_or(0))?;
-
-    if let Some(charger_state) = charger_state_receiver.try_get() {
-        server.telemetry.charger_state_set(&charger_state)?;
+async fn notify_watch<T: Clone>(mut recv: StateReceiver<'_, T>, mut on_change: impl FnMut(&T)) {
+    if let Some(v) = recv.try_get() {
+        on_change(&v);
     }
-
-    server
-        .telemetry
-        .qmax_update_set(&qmax_update_receiver.try_get().unwrap_or_default())?;
-    server
-        .telemetry
-        .ocv_measurement_set(&ocv_measurement_receiver.try_get().unwrap_or_default())?;
-
     loop {
-        let r = select5(
-            soc_receiver.changed(),
-            charger_state_receiver.changed(),
-            periodic_update_receiver.changed(),
-            qmax_update_receiver.changed(),
-            ocv_measurement_receiver.changed(),
-        )
-        .await;
-
-        let err = match r {
-            Either5::First(x) => server.bas.battery_level_notify(conn, &x),
-            Either5::Second(x) => server.telemetry.charger_state_notify(conn, &x),
-            Either5::Third(x) => server.telemetry.periodic_update_notify(conn, &x),
-            Either5::Fourth(x) => server.telemetry.qmax_update_notify(conn, &x),
-            Either5::Fifth(x) => server.telemetry.ocv_measurement_notify(conn, &x),
-        };
-
-        if let Err(x) = err {
-            warn!("unable to notify - {}", x);
-        }
+        on_change(&recv.changed().await);
     }
+}
+
+async fn run_notifications(state: &SystemState, conn: &Connection, server: &GattServer) -> ! {
+    futures::join!(
+        notify_watch(unwrap!(state.soc.receiver()), |x| {
+            server.bas.battery_level_set(x).ok();
+            server.bas.battery_level_notify(conn, x).ok();
+        }),
+        notify_watch(unwrap!(state.charger_state.receiver()), |x| {
+            server.telemetry.charger_state_set(x).ok();
+            server.telemetry.charger_state_notify(conn, x).ok();
+        }),
+        notify_watch(unwrap!(state.periodic_update.receiver()), |x| {
+            server.telemetry.periodic_update_notify(conn, x).ok();
+        }),
+        notify_watch(unwrap!(state.qmax_update.receiver()), |x| {
+            server.telemetry.qmax_update_set(x).ok();
+            server.telemetry.qmax_update_notify(conn, x).ok();
+        }),
+        notify_watch(unwrap!(state.ocv_measurement.receiver()), |x| {
+            server.telemetry.ocv_measurement_set(x).ok();
+            server.telemetry.ocv_measurement_notify(conn, x).ok();
+        }),
+        notify_watch(unwrap!(state.ratable_update.receiver()), |x| {
+            server.telemetry.ratable_update_set(x).ok();
+            server.telemetry.ratable_update_notify(conn, x).ok();
+        }),
+        notify_watch(unwrap!(state.scan_state.receiver()), |x| {
+            server.requests.scan_state_set(x).ok();
+            server.requests.scan_state_notify(conn, x).ok();
+        }),
+        notify_watch(unwrap!(state.controller_connected.receiver()), |x| {
+            server.telemetry.controller_connected_set(x).ok();
+            server.telemetry.controller_connected_notify(conn, x).ok();
+        }),
+    );
+
+    unreachable!()
 }
 
 pub async fn peripheral_loop(sd: &Softdevice, ps: &'static SystemState, server: &GattServer) {
@@ -139,25 +136,16 @@ pub async fn peripheral_loop(sd: &Softdevice, ps: &'static SystemState, server: 
                     continue;
                 }
 
-                let r = select(
+                let Either::First(r) = select(
                     run_gatt(&server, &conn, ps),
                     run_notifications(ps, &conn, &server),
                 )
                 .await;
 
-                match r {
-                    Either::First(r) => {
-                        info!("gatt finished");
-                        if let Err(e) = r {
-                            error!("gatt error - {}", e);
-                        }
-                    }
-                    Either::Second(r) => {
-                        info!("notification dispatcher finished");
-                        if let Err(e) = r {
-                            error!("notification dispatcher error - {}", e);
-                        }
-                    }
+                info!("gatt finished");
+
+                if let Err(e) = r {
+                    error!("gatt error - {}", e);
                 }
             }
 

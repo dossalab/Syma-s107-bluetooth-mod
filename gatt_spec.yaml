@@ -43,6 +43,11 @@ types:
       - name: timestamp
         ty: SecInstant
 
+  - name: RaTableUpdate
+    fields:
+      - name: timestamp
+        ty: SecInstant
+
 services:
   - name: TelemetryService
     field: telemetry
@@ -69,6 +74,14 @@ services:
         uuid: 38924a07-23d7-43fe-af5d-9c887a589cf1
         ty: SecInstant
         permissions: [read, notify]
+      - field: controller_connected
+        uuid: 38924a07-23d7-43fe-af5d-9c887a689cf1
+        ty: bool
+        permissions: [read, notify]
+      - field: ratable_update
+        uuid: 38924a07-23d7-43fe-af5d-9c887a789cf1
+        ty: RaTableUpdate
+        permissions: [read, notify]
 
   - name: RequestsService
     field: requests
@@ -86,10 +99,10 @@ services:
         uuid: 38924a07-23d7-43fe-af5d-9c887b389cf1
         ty: bool
         permissions: [write]
-      - field: start_scan
+      - field: scan_state
         uuid: 38924a07-23d7-43fe-af5d-9c887b489cf1
         ty: bool
-        permissions: [write]
+        permissions: [read, write, notify]
 
   - name: BatteryService
     field: bas

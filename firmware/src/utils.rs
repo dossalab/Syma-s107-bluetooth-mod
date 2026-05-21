@@ -1,6 +1,17 @@
-use embassy_futures::select::select;
+use core::future::Future;
 
-use crate::state::StateReceiver;
+use embassy_futures::select::select;
+use scopeguard::guard;
+
+use crate::state::{StateReceiver, StateSender};
+
+/// Runs `fun` and publishes its lifecycle to `sender`: sends `true` on start,
+/// `false` on completion (or cancellation via drop).
+pub async fn run_reported<F: Future>(sender: StateSender<'_, bool>, fun: F) -> F::Output {
+    sender.send(true);
+    let _guard = guard(sender, |s| s.send(false));
+    fun.await
+}
 
 pub async fn run_with_receiver<'a, F>(mut receiver: StateReceiver<'a, bool>, mut fun: F)
 where

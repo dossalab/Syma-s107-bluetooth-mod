@@ -1,5 +1,5 @@
 use crate::{
-    ble::types::{ChargerState, OcvMeasurement, PeriodicUpdate, QmaxUpdate},
+    ble::types::{ChargerState, OcvMeasurement, PeriodicUpdate, QmaxUpdate, RaTableUpdate},
     state::{StateReceiver, StateSender, SystemState},
     types::Request,
     PowerResources, SharedI2cBus, SharedI2cDevice,
@@ -48,6 +48,7 @@ struct Gauge<'a> {
     requests_receiver: StateReceiver<'a, Request>,
     ocv_taken_sender: StateSender<'a, OcvMeasurement>,
     qmax_update_sender: StateSender<'a, QmaxUpdate>,
+    ratable_update_sender: StateSender<'a, RaTableUpdate>,
 
     // Flags tracker
     prev_flags: (StatusFlags, ControlStatusFlags),
@@ -177,6 +178,13 @@ impl<'a> Gauge<'a> {
                     });
                 }
 
+                if control_flags.contains(ControlStatusFlags::RES_UP) {
+                    info!("Ra table updated");
+                    self.ratable_update_sender.send(RaTableUpdate {
+                        timestamp: Instant::now().into(),
+                    });
+                }
+
                 if control_flags.contains(ControlStatusFlags::QMAX_UP) {
                     // Let's also read and report the current QMax value
                     let state = self.gauge.memblock_read::<StateClass>().await?;
@@ -285,6 +293,7 @@ impl<'a> Gauge<'a> {
             controller_connected_receiver: unwrap!(ss.controller_connected.receiver()),
             ocv_taken_sender: ss.ocv_measurement.sender(),
             qmax_update_sender: ss.qmax_update.sender(),
+            ratable_update_sender: ss.ratable_update.sender(),
 
             prev_flags: (StatusFlags::empty(), ControlStatusFlags::empty()),
         }

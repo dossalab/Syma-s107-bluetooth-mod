@@ -8,10 +8,10 @@ use nrf_softdevice::{
     },
     Softdevice,
 };
-use scopeguard::guard;
 
 use crate::state::SystemState;
 use crate::types::Request;
+use crate::utils::run_reported;
 use crate::xbox::XboxHidServiceClient;
 use crate::xbox::{self, XboxHidServiceClientEvent};
 
@@ -152,7 +152,6 @@ pub async fn central_loop(
     state: &'static SystemState,
     bonder: &'static Bonder,
 ) {
-    let controller_connected_sender = state.controller_connected.sender();
     let mut requests_receiver = unwrap!(state.requests.receiver());
 
     loop {
@@ -166,15 +165,15 @@ pub async fn central_loop(
         info!("StartScan request received, scanning...");
 
         let result: Result<(), BleError> = async {
-            if let Some(address) = scan(sd).await {
+            let address = run_reported(state.scan_state.sender(), scan(sd)).await;
+
+            if let Some(address) = address {
                 let conn = connect(sd, address, bonder).await?;
 
-                controller_connected_sender.send(true);
-                let _g = guard((), |_| controller_connected_sender.send(false));
-
-                match run_gatt(conn, state).await {
-                    Err(e) => error!("run gatt exited with error - {}", e),
-                    _ => {}
+                if let Err(e) =
+                    run_reported(state.controller_connected.sender(), run_gatt(conn, state)).await
+                {
+                    error!("run gatt exited with error - {}", e);
                 }
             }
 

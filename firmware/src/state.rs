@@ -1,5 +1,5 @@
 use crate::{
-    ble::types::{ChargerState, OcvMeasurement, PeriodicUpdate, QmaxUpdate},
+    ble::types::{ChargerState, OcvMeasurement, PeriodicUpdate, QmaxUpdate, RaTableUpdate},
     types::{JoystickData, Request},
 };
 use defmt::{info, unwrap, warn};
@@ -23,6 +23,8 @@ pub struct SystemState {
     pub controller_run_allowed: StateWatch<bool>,
     pub qmax_update: StateWatch<QmaxUpdate>,
     pub ocv_measurement: StateWatch<OcvMeasurement>,
+    pub ratable_update: StateWatch<RaTableUpdate>,
+    pub scan_state: StateWatch<bool>,
 }
 
 impl<'a> SystemState {
@@ -35,8 +37,10 @@ impl<'a> SystemState {
             controller_sample: Watch::new(),
             requests: Watch::new(),
             controller_run_allowed: Watch::new_with(false),
-            qmax_update: Watch::new(),
-            ocv_measurement: Watch::new(),
+            qmax_update: Watch::new_with(Default::default()),
+            ocv_measurement: Watch::new_with(Default::default()),
+            ratable_update: Watch::new_with(Default::default()),
+            scan_state: Watch::new_with(false),
         }
     }
 }
