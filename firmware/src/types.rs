@@ -1,11 +1,7 @@
 use defmt::bitflags;
 
-use crate::ble::types::{ControlParams, PidParams};
-
 #[derive(Clone)]
 pub enum Request {
-    PidUpdate(PidParams),
-    ControlUpdate(ControlParams),
     Reboot,
     FuelgaugeReset,
     StartScan,

@@ -1,5 +1,5 @@
 use crate::ble::types::{
-    GattServer, GattServerEvent, RequestsServiceEvent, TELEMETRY_SERVICE_UUID,
+    ConfigServiceEvent, GattServer, GattServerEvent, RequestsServiceEvent, TELEMETRY_SERVICE_UUID,
 };
 use defmt::{error, info, unwrap};
 use embassy_futures::select::{select, Either};
@@ -23,25 +23,26 @@ async fn run_gatt(
     state: &SystemState,
 ) -> Result<(), BleError> {
     let host_request_sender = state.requests.sender();
+    let config_sender = state.config.sender();
     let mut ticker = Ticker::every(Duration::from_secs(1));
 
-    let handle_requests = |e| {
-        let request = match e {
-            RequestsServiceEvent::RebootWrite(true) => Request::Reboot,
-            RequestsServiceEvent::PidUpdateWrite(pid) => Request::PidUpdate(pid),
-            RequestsServiceEvent::ControlUpdateWrite(params) => Request::ControlUpdate(params),
-            RequestsServiceEvent::FuelgaugeResetWrite(true) => Request::FuelgaugeReset,
-            RequestsServiceEvent::ScanStateWrite(true) => Request::StartScan,
+    let handle_requests = |e| match e {
+        RequestsServiceEvent::RebootWrite(true) => host_request_sender.send(Request::Reboot),
+        RequestsServiceEvent::FuelgaugeResetWrite(true) => {
+            host_request_sender.send(Request::FuelgaugeReset)
+        }
+        RequestsServiceEvent::ScanStateWrite(true) => host_request_sender.send(Request::StartScan),
+        _ => {}
+    };
 
-            _ => return,
-        };
-
-        host_request_sender.send(request);
+    let handle_config = |e| match e {
+        ConfigServiceEvent::ConfigWrite(cfg) => config_sender.send(cfg),
     };
 
     let callback = |event| match event {
         GattServerEvent::Bas(_e) => {}
         GattServerEvent::Requests(e) => handle_requests(e),
+        GattServerEvent::ConfigService(e) => handle_config(e),
         GattServerEvent::Telemetry(_e) => {}
     };
 
@@ -103,6 +104,9 @@ async fn run_notifications(state: &SystemState, conn: &Connection, server: &Gatt
         notify_watch(unwrap!(state.controller_connected.receiver()), |x| {
             server.telemetry.controller_connected_set(x).ok();
             server.telemetry.controller_connected_notify(conn, x).ok();
+        }),
+        notify_watch(unwrap!(state.config.receiver()), |x| {
+            server.config_service.config_set(x).ok();
         }),
     );
 

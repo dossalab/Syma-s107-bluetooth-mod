@@ -9,10 +9,8 @@ use embassy_time::{Duration, Ticker, Timer};
 use pid::Pid;
 
 use crate::{
-    ble::types::ControlParams,
-    state::SystemState,
-    types::{JoystickData, Request},
-    utils, xbox, ControllerResources, Irqs,
+    ble::types::Configuration, state::SystemState, types::JoystickData, utils, xbox,
+    ControllerResources, Irqs,
 };
 
 struct Controller<'a> {
@@ -43,8 +41,6 @@ impl<'a> Controller<'a> {
     const RECEIVE_TIMEOUT: Duration = Duration::from_secs(1);
     /// Max yaw axis value after the >> 6 shift applied in tick().
     const YAW_STICK_MAX: i32 = xbox::STICKS_RANGE / 2 >> 6;
-    /// Default expo curve strength for yaw (rudder). 0.0 = linear, 1.0 = full cubic.
-    const YAW_EXPO_DEFAULT: f32 = 0.6;
 
     fn set_pwm(&mut self, r1: i32, r2: i32, v: i32) {
         let clamp_to_pwm = |x: i32| x.clamp(0, Self::PWM_MAX_DUTY as i32) as u16;
@@ -106,20 +102,15 @@ impl<'a> Controller<'a> {
         self.input = jd;
     }
 
-    fn set_pid(&mut self, p: f32, i: f32, d: f32) {
+    fn apply_config(&mut self, config: Configuration) {
         self.pid
-            .p(p, Self::PID_CONTROL_LIMIT)
-            .i(i, Self::PID_CONTROL_LIMIT)
-            .d(d, Self::PID_CONTROL_LIMIT);
+            .p(config.p, Self::PID_CONTROL_LIMIT)
+            .i(config.i, Self::PID_CONTROL_LIMIT)
+            .d(config.d, Self::PID_CONTROL_LIMIT);
+        self.yaw_expo = config.yaw_expo.clamp(0.0, 1.0);
     }
 
-    fn set_control_params(&mut self, params: ControlParams) {
-        let yaw_expo = params.yaw_expo;
-        info!("updating control params: yaw_expo: {}", yaw_expo);
-        self.yaw_expo = yaw_expo.clamp(0.0, 1.0);
-    }
-
-    async fn init(r: &'a mut ControllerResources) -> Self {
+    async fn init(r: &'a mut ControllerResources, config: Configuration) -> Self {
         let mut pwm_config = pwm::SimpleConfig::default();
 
         pwm_config.max_duty = Controller::PWM_MAX_DUTY;
@@ -152,36 +143,33 @@ impl<'a> Controller<'a> {
         );
 
         let adc = saadc::Saadc::new(r.adc.reborrow(), Irqs, adc_config, [adc_channel_config]);
-
         let gyro_power = Output::new(r.gyro_power.reborrow(), Level::High, OutputDrive::Standard);
         let tail_n = Output::new(r.tail_n.reborrow(), Level::Low, OutputDrive::Standard);
-
-        let mut pid = Pid::new(0.0, Self::PWM_MAX_DUTY);
-        pid.p(0.5, Self::PID_CONTROL_LIMIT)
-            .i(0.2, Self::PID_CONTROL_LIMIT)
-            .d(0.2, Self::PID_CONTROL_LIMIT);
 
         adc.calibrate().await;
 
         // Give gyro some time to settle
         Timer::after_millis(50).await;
 
-        Self {
+        let mut s = Self {
             adc,
             _gyro_power: gyro_power,
             pwm,
             tail_n,
-            pid,
+            pid: Pid::new(0.0, Self::PWM_MAX_DUTY),
             input: Default::default(),
             gyro_offset: 742,
-            yaw_expo: Self::YAW_EXPO_DEFAULT,
-        }
+            yaw_expo: 0.0,
+        };
+
+        s.apply_config(config);
+        s
     }
 }
 
 #[embassy_executor::task]
 pub async fn run(state: &'static SystemState, mut r: ControllerResources) {
-    let mut request_receiver = unwrap!(state.requests.receiver());
+    let mut config_receiver = unwrap!(state.config.receiver());
     let mut controller_sample_receiver = unwrap!(state.controller_sample.receiver());
     let controller_run_allowed_receiver = unwrap!(state.controller_run_allowed.receiver());
 
@@ -190,31 +178,19 @@ pub async fn run(state: &'static SystemState, mut r: ControllerResources) {
 
         const CONTROL_LOOP_RATE: Duration = Duration::from_hz(200);
 
-        let mut controller = Controller::init(&mut r).await;
+        let initial_config = config_receiver.try_get().unwrap_or_default();
+        let mut controller = Controller::init(&mut r, initial_config).await;
         let mut ticker = Ticker::every(CONTROL_LOOP_RATE);
 
         loop {
-            let r = select3(
-                request_receiver.changed(),
+            match select3(
+                config_receiver.changed(),
                 controller_sample_receiver.changed(),
                 ticker.next(),
             )
-            .await;
-
-            match r {
-                Either3::First(Request::PidUpdate(pid)) => {
-                    let (p, i, d) = (pid.p, pid.i, pid.d);
-
-                    info!("updating pid params: p: {}, i: {}, d: {}", p, i, d);
-                    controller.set_pid(p, i, d);
-                }
-
-                Either3::First(Request::ControlUpdate(params)) => {
-                    controller.set_control_params(params);
-                }
-
-                Either3::First(_) => {}
-
+            .await
+            {
+                Either3::First(config) => controller.apply_config(config),
                 Either3::Second(input) => controller.add_input(input),
                 Either3::Third(_) => controller.tick().await,
             }

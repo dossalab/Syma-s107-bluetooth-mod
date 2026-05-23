@@ -22,7 +22,7 @@ types:
       - name: failure
         ty: bool
 
-  - name: PidParams
+  - name: Configuration
     fields:
       - name: p
         ty: f32
@@ -30,9 +30,6 @@ types:
         ty: f32
       - name: d
         ty: f32
-
-  - name: ControlParams
-    fields:
       - name: yaw_expo
         ty: f32
 
@@ -96,10 +93,6 @@ services:
         uuid: 38924a07-23d7-43fe-af5d-9c887b189cf1
         ty: bool
         permissions: [write]
-      - field: pid_update
-        uuid: 38924a07-23d7-43fe-af5d-9c887b289cf1
-        ty: PidParams
-        permissions: [write]
       - field: fuelgauge_reset
         uuid: 38924a07-23d7-43fe-af5d-9c887b389cf1
         ty: bool
@@ -108,10 +101,15 @@ services:
         uuid: 38924a07-23d7-43fe-af5d-9c887b489cf1
         ty: bool
         permissions: [read, write, notify]
-      - field: control_update
-        uuid: 38924a07-23d7-43fe-af5d-9c887b589cf1
-        ty: ControlParams
-        permissions: [write]
+
+  - name: ConfigService
+    field: config_service
+    uuid: 38924a07-23d7-43fe-af5d-9c887c089cf1
+    characteristics:
+      - field: config
+        uuid: 38924a07-23d7-43fe-af5d-9c887c189cf1
+        ty: Configuration
+        permissions: [read, write]
 
   - name: BatteryService
     field: bas
