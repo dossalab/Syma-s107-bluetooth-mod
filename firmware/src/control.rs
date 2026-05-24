@@ -118,8 +118,8 @@ impl<'a> Controller<'a> {
 
         let mut adc_config = saadc::Config::default();
 
-        adc_config.resolution = saadc::Resolution::_12BIT;
-        adc_config.oversample = saadc::Oversample::OVER4X;
+        adc_config.resolution = saadc::Resolution::_12bit;
+        adc_config.oversample = saadc::Oversample::Over4x;
 
         let mut adc_channel_config =
             saadc::ChannelConfig::differential(r.gyro_input.reborrow(), r.gyro_vref.reborrow());
@@ -131,7 +131,7 @@ impl<'a> Controller<'a> {
         // - however, some natural DC offset seem to be taking place, so we need wider range
 
         adc_channel_config.time = saadc::Time::_40US;
-        adc_channel_config.gain = saadc::Gain::GAIN1_2;
+        adc_channel_config.gain = saadc::Gain::Gain1_2;
 
         let pwm = SimplePwm::new_3ch(
             r.pwm.reborrow(),

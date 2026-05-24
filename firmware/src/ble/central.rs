@@ -201,8 +201,9 @@ async fn run_gatt(conn: ble::Connection, state: &'static SystemState) -> Result<
 
     debug!("services discovered!");
 
-    client.hid_report_map_read().await?;
+    let report = client.hid_report_map_read().await?;
     client.hid_report_cccd_write(true).await?;
+    info!("report map: {}", report);
 
     debug!("notifications enabled!");
 

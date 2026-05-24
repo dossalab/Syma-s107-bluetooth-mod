@@ -10,7 +10,7 @@ pub const STICKS_RANGE: i32 = 65535;
 #[gatt_client(uuid = "1812")]
 pub struct XboxHidServiceClient {
     #[characteristic(uuid = "2a4b", read)]
-    pub hid_report_map: [u8; 64],
+    pub hid_report_map: [u8; 512],
 
     #[characteristic(uuid = "2a4d", read, notify)]
     pub hid_report: [u8; 16],
