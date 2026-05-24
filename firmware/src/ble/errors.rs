@@ -3,6 +3,7 @@ use nrf_softdevice::ble::{self, central, gatt_client, gatt_server, peripheral};
 #[derive(defmt::Format)]
 pub enum BleError {
     Encryption(ble::EncryptError),
+    SecurityFailed,
     ConnectError(central::ConnectError),
     DiscoveryError,
     WriteError(gatt_client::WriteError),
